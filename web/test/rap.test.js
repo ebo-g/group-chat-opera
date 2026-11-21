@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { rapLyric, WORD_SR } from '../src/audio/wordsong.js';
+import { rapLyric, analyze, medianF0, WORD_SR } from '../src/audio/wordsong.js';
 import { scoreBattle, lineScore, lyricsText } from '../src/stage/scorecard.js';
 
 // Synthetic "speech": 5 syllables, each an unvoiced burst + a 150 ms voiced vowel, irregular spacing.
@@ -9,8 +9,7 @@ function speech() {
   const out = [];
   let seed = 11;
   const noise = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296) * 2 - 1;
-  const gaps = [0.05, 0.12, 0.05, 0.2, 0.06]; // uneven rhythm
-  for (const gap of gaps) {
+  for (const gap of [0.05, 0.12, 0.05, 0.2, 0.06]) {
     for (let i = 0; i < sr * gap; i++) out.push(noise() * 0.04);
     const period = Math.round(sr / 125);
     const n = Math.round(sr * 0.15);
@@ -23,19 +22,44 @@ function speech() {
   return Float32Array.from(out);
 }
 
-test('rap flow snaps every vowel onto the 16th-note grid and fits the line into its bars', () => {
-  const step = 60 / 98 / 4;
-  const res = rapLyric(speech(), WORD_SR, 'Who ate the lasagne now', { id: 'c1', voice: 'tenor' }, { stepSeconds: step, steps: 32 });
+const step = 60 / 98 / 4;
+
+test('rap flow keeps the speech continuous: same pitch, natural pacing, fits inside its two bars', () => {
+  const x = speech();
+  const res = rapLyric(x, WORD_SR, 'Who ate the lasagne now', { id: 'c1', voice: 'tenor' }, { stepSeconds: step, steps: 32 });
   assert.ok(res, 'a line is produced');
-  assert.equal(res.slots.length, res.heard);
-  for (let i = 1; i < res.slots.length; i++) assert.ok(res.slots[i] > res.slots[i - 1], 'slots strictly increase');
-  assert.ok(res.slots.at(-1) < 32, 'fits inside two bars');
-  res.timeline.forEach((t, i) => {
-    const errMs = Math.abs(t.vowelStart / WORD_SR - res.slots[i] * step) * 1000;
-    assert.ok(errMs < step * 1000 * 0.4, `vowel ${i} lands within 40% of a 16th note of its step (${errMs.toFixed(0)}ms)`);
-  });
-  assert.ok(res.samples.every(Number.isFinite));
-  assert.ok(Math.max(...res.samples.map(Math.abs)) <= 0.61, 'normalised');
+  assert.ok(res.samples.every(Number.isFinite), 'no NaN/Infinity');
+  assert.ok(Math.max(...res.samples.map(Math.abs)) <= 0.61, 'normalised, not clipping');
+  assert.ok(res.ratio >= 0.85 && res.ratio <= 1.0, `tempo change stays gentle and never slows the speaker (x${res.ratio})`);
+  assert.ok(res.samples.length / WORD_SR <= 32 * step, 'fits within two bars');
+  // pitch is untouched (this is time-scaling, not re-pitching)
+  const before = medianF0(analyze(x));
+  const after = medianF0(analyze(res.samples));
+  assert.ok(Math.abs(1200 * Math.log2(after / before)) < 60, `pitch preserved (${before.toFixed(0)}Hz -> ${after.toFixed(0)}Hz)`);
+  // it starts right away so the line lands on the bar line
+  const firstSound = res.samples.findIndex((v) => Math.abs(v) > 0.05);
+  assert.ok(firstSound / WORD_SR < 0.25, 'starts within 250ms of the bar line');
+});
+
+test('rap flow adds no dead air compared with the original speech', () => {
+  const silentFraction = (data) => {
+    const w = Math.round(WORD_SR * 0.01);
+    const e = [];
+    for (let i = 0; i + w < data.length; i += w) {
+      let s = 0;
+      for (let k = 0; k < w; k++) s += data[i + k] ** 2;
+      e.push(Math.sqrt(s / w));
+    }
+    const peak = Math.max(...e);
+    let a = 0;
+    while (a < e.length && e[a] < peak * 0.03) a++;
+    let b = e.length - 1;
+    while (b > a && e[b] < peak * 0.03) b--;
+    return e.slice(a, b + 1).filter((v) => v < peak * 0.03).length / Math.max(1, b - a);
+  };
+  const x = speech();
+  const res = rapLyric(x, WORD_SR, 'Who ate the lasagne now', { id: 'c1', voice: 'alto' }, { stepSeconds: step, steps: 32 });
+  assert.ok(silentFraction(res.samples) <= silentFraction(x) + 0.08, 'no new gaps between syllables');
 });
 
 test('rap flow returns null for unusable audio', () => {

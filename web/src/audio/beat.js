@@ -79,9 +79,9 @@ export function stopBeat() {
 export const stepSecondsFor = (mood) => 60 / (BPM[mood] || 95) / 4;
 
 /** Context time of the next bar line (the "one") at least `lead` seconds from now, or null if no beat is playing. */
-export function nextBarTime(lead = 0.08) {
+export function nextBarTime(lead = 0.08, quantumSteps = 16) {
   if (!state) return null;
-  const bar = state.stepSeconds * 16;
+  const bar = state.stepSeconds * quantumSteps; // 16 = next bar line, 8 = next half-bar (beat 3)
   const now = state.ctx.currentTime + lead;
   return state.anchor + Math.max(0, Math.ceil((now - state.anchor) / bar)) * bar;
 }
@@ -121,5 +121,6 @@ export function startBeat(ctx, mood) {
 /** Lower the beat while someone is rapping. */
 export function duckBeat(isDucked) {
   if (!state) return;
-  state.out.gain.setTargetAtTime(isDucked ? 0.32 : 0.5, state.ctx.currentTime, 0.12);
+  // barely dip: a big dip pumps audibly around every line
+  state.out.gain.setTargetAtTime(isDucked ? 0.44 : 0.5, state.ctx.currentTime, 0.12);
 }

@@ -115,7 +115,10 @@ export function startWordSongs({ cast, scenes, context, isCurrent, normalize, st
   for (const job of jobs) songs.set(job.line, new Promise((resolve) => resolvers.set(job, resolve)));
 
   const statusPromise = voiceStatus();
-  const espeakPromise = loadEspeak();
+  // Rap does not use eSpeak: it is a robotic formant synthesizer and sounds choppy. Without
+  // ElevenLabs, rap lines fall back to the browser's natural voices (handled by the caller).
+  const useEspeak = style !== 'rap';
+  const espeakPromise = useEspeak ? loadEspeak() : Promise.resolve(null);
   const queue = [...jobs];
 
   async function render(job) {
@@ -132,6 +135,7 @@ export function startWordSongs({ cast, scenes, context, isCurrent, normalize, st
         console.warn(`[opera-audio] ElevenLabs failed for ${job.member.name || job.member.id}, using eSpeak: ${error.message}`);
       }
     }
+    if (!speech && !useEspeak) return null;
     if (!speech) {
       const engine = await espeakPromise;
       speech = espeakSpeech(engine, job.text, job.member.voice, { speed: style === 'rap' ? 165 : 125 });

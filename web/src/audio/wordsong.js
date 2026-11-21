@@ -435,67 +435,105 @@ export function fitRegister(notes, speechF0) {
 }
 
 /**
- * RAP FLOW: instead of a melody, lock the speech to the beat. Every syllable nucleus is moved to
- * the nearest 16th-note step of a `steps`-step grid (2 bars by default), keeping the speaker's own
- * pitch contour and natural vowel/consonant lengths, so the line grooves with the drums.
+ * RAP FLOW: keep the speech CONTINUOUS and just time-scale the whole line (PSOLA: pitch and
+ * formants untouched), so it keeps its natural, connected prosody, then start it on the bar line.
+ * (Cutting the line into syllables and re-placing them on a grid made it sound choppy.)
  * Buffer time 0 is the downbeat of the first bar. Returns null when the speech is unusable.
  */
 export function rapLyric(speech, sampleRate, text, member, { stepSeconds, steps = 32 }, { formantStrength = 0.5 } = {}) {
   const x = toWordRate(speech, sampleRate);
   const an = analyze(x, WORD_SR);
   if (an.frames < 10) return null;
-  const { nuclei } = findNuclei(an, {});
-  if (!nuclei.length) return null;
   const marks = pitchMarks(x, an);
   if (!marks.length) return null;
   const sr = an.sr;
-  const frameSample = (f) => an.center(f) - (an.hop >> 1);
-  const speechF0 = medianF0(an);
-  const coreF0 = (nu) => {
-    const v = [];
-    for (let f = nu.coreFrom; f <= nu.coreTo; f++) if (an.f0[f]) v.push(an.f0[f]);
-    v.sort((a, b) => a - b);
-    return v.length ? v[v.length >> 1] : speechF0;
+
+  // the sounding part of the phrase
+  let first = 0;
+  while (first < an.frames && an.rms[first] < an.maxRms * 0.05) first++;
+  let last = an.frames - 1;
+  while (last > first && an.rms[last] < an.maxRms * 0.05) last--;
+  const s0 = Math.max(0, an.center(first) - (an.hop >> 1));
+  const s1 = Math.min(x.length - 1, an.center(last) + (an.hop >> 1));
+  if (s1 - s0 < sr * 0.15) return null;
+  const naturalSeconds = (s1 - s0) / sr;
+
+  // gentle tempo change: tighten toward ~85% of two bars, never slower than natural, never garbled
+  const target = Math.max(8, steps - 4) * stepSeconds * 0.85;
+  const ratio = Math.max(0.85, Math.min(1.0, target / naturalSeconds)); // brisk: never slower than the speaker
+  const lead = Math.round(sr * 0.06);
+  const total = lead + Math.round((s1 - s0) * ratio) + Math.round(sr * 0.2);
+  const out = new Float32Array(total);
+  const weight = new Float32Array(total);
+
+  const profile = singerProfile(member);
+  const formant = formantFor(profile, formantStrength);
+  const allMarks = marks.flatMap((r) => r.marks);
+  const voicedAt = (s) => {
+    const f = Math.round((s - (an.win >> 1)) / an.hop);
+    return f >= 0 && f < an.frames && an.voiced[f] === 1;
+  };
+  const nearestMark = (s) => {
+    let lo = 0;
+    let hi = allMarks.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (allMarks[mid] < s) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo > 0 && Math.abs(allMarks[lo - 1] - s) < Math.abs(allMarks[lo] - s)) lo -= 1;
+    return lo;
+  };
+  const hann = (n) => {
+    const w = new Float32Array(n);
+    for (let i = 0; i < n; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * (i + 0.5)) / n);
+    return w;
+  };
+  const addGrain = (center, srcCenter, half, win, alpha) => {
+    for (let i = -half; i < half; i++) {
+      const o = center + i;
+      if (o < 0 || o >= total) continue;
+      const pos = srcCenter + i * alpha;
+      const k = Math.floor(pos);
+      if (k < 0 || k + 1 >= x.length) continue;
+      const frac = pos - k;
+      const w = win[i + half];
+      out[o] += (x[k] * (1 - frac) + x[k + 1] * frac) * w;
+      weight[o] += w;
+    }
   };
 
-  // natural vowel-peak times, then compress/expand (within limits) to fill the bars, then snap to steps
-  const peakT = nuclei.map((nu) => frameSample(nu.peak) / sr);
-  const natural = Math.max(0.2, peakT[peakT.length - 1] - peakT[0]);
-  const usable = Math.max(8, steps - 4) * stepSeconds;
-  const scale = Math.max(0.55, Math.min(1.2, usable / natural));
-  const lead = 2; // start two 16ths into the bar so the first word lands just after the one
-  const slots = [];
-  nuclei.forEach((_, j) => {
-    let slot = lead + Math.round(((peakT[j] - peakT[0]) * scale) / stepSeconds);
-    if (j > 0 && slot <= slots[j - 1]) slot = slots[j - 1] + 1;
-    slots.push(slot);
-  });
+  const unvoicedHop = Math.round(sr * 0.005);
+  const unvoicedWin = hann(unvoicedHop * 2);
+  let pos = lead;
+  while (pos < total - Math.round(sr * 0.2)) {
+    const s = s0 + (pos - lead) / ratio; // where in the source this output moment comes from
+    if (s >= s1) break;
+    if (voicedAt(Math.round(s))) {
+      const k = nearestMark(s);
+      const left = allMarks[k] - (allMarks[k - 1] ?? allMarks[k] - Math.round(sr * 0.008));
+      const right = (allMarks[k + 1] ?? allMarks[k] + Math.round(sr * 0.008)) - allMarks[k];
+      const period = Math.max(Math.round(sr * 0.002), Math.min(Math.round(sr * 0.02), Math.round((left + right) / 2)));
+      const half = Math.max(2, Math.round(period / formant));
+      addGrain(Math.round(pos), allMarks[k], half, hann(half * 2), formant);
+      pos += period; // advance by the ORIGINAL period: the pitch is unchanged
+    } else {
+      addGrain(Math.round(pos), Math.round(s), unvoicedHop, unvoicedWin, 1);
+      pos += unvoicedHop;
+    }
+  }
 
-  // Pull each vowel only PART of the way to its grid step, so the speech keeps its natural flow and
-  // the line still grooves; snapping fully leaves dead air between syllables and sounds choppy.
-  const SNAP = 0.8;
-  const times = nuclei.map((_, j) => {
-    const natural = (lead + ((peakT[j] - peakT[0]) * scale) / stepSeconds) * stepSeconds;
-    return natural + SNAP * (slots[j] * stepSeconds - natural);
-  });
-  for (let j = 1; j < times.length; j++) times[j] = Math.max(times[j], times[j - 1] + 0.07);
-  const onsets = nuclei.map((nu) => Math.max(0, (frameSample(nu.coreFrom) - frameSample(nu.from)) / sr));
-  const notes = nuclei.map((nu, j) => {
-    const onset = onsets[j];
-    const total = Math.max(0.08, (frameSample(nu.to) - frameSample(nu.from)) / sr);
-    // room until the NEXT segment starts (its consonant onset begins before its vowel)
-    const room = j + 1 < times.length ? times[j + 1] - onsets[j + 1] - (times[j] - onset) : total;
-    // stretch the vowel into most of that room (no holes), but never into a drawl or an overlap
-    const dur = Math.min(total * 2.2, Math.max(total, total + 0.8 * (room - total)), Math.max(total, room));
-    return {
-      midi: 69 + 12 * Math.log2(coreF0(nu) / 440),
-      start: Math.max(0, times[j] - onset), // the vowel, not the consonant, sits near the grid
-      dur,
-    };
-  });
-  const profile = singerProfile(member);
-  const { samples, timeline } = singify(x, an, marks, nuclei, { notes }, profile, { vibrato: false, formant: formantFor(profile, formantStrength) });
-  return { samples, sampleRate: WORD_SR, notes, heard: nuclei.length, expected: syllabify(text).length, slots, timeline, nuclei, steps };
+  let peak = 0;
+  for (let i = 0; i < total; i++) {
+    out[i] = weight[i] > 1e-3 ? out[i] / Math.max(weight[i], 0.35) : 0;
+    peak = Math.max(peak, Math.abs(out[i]));
+  }
+  const fade = Math.round(sr * 0.01);
+  for (let i = 0; i < fade && i < total; i++) { out[i] *= i / fade; out[total - 1 - i] *= i / fade; }
+  const gain = peak > 0 ? 0.6 / peak : 1;
+  for (let i = 0; i < total; i++) out[i] *= gain;
+  const syllables = syllabify(text).length;
+  return { samples: out, sampleRate: WORD_SR, heard: syllables, expected: syllables, ratio, naturalSeconds, lead: lead / sr };
 }
 
 /**

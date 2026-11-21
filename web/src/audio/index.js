@@ -339,7 +339,12 @@ async function sungLine(line, castMember) {
     }
   }
   if (genre === 'rap') {
-    logLineEngine(line, castMember, 'speech synthesis (rap flow unavailable)', `${profile.sex} ${profile.voice}`);
+    logLineEngine(line, castMember, 'speech synthesis (natural browser voice)', `${profile.sex} ${profile.voice}`);
+    // Start on the next 16th-note step: still on the beat, without lagging behind the surtitles.
+    const at = nextStepTime(0.12);
+    if (at != null && context) {
+      await new Promise((resolve) => window.setTimeout(resolve, Math.max(0, (at - context.currentTime) * 1000)));
+    }
     await speakLine(line, castMember);
     return;
   }
