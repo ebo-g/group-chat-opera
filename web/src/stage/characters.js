@@ -15,7 +15,7 @@ function esc(value) {
 }
 
 function safeColor(color) {
-    return /^#[0-9a-fA-F]{3,8}$/.test(color || '') ? color : '#8888cc';
+    return /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(color || '') ? color : '#8888cc';
 }
 
 export function buildCharacterSVG(member) {
@@ -51,20 +51,22 @@ export function buildCharacterSVG(member) {
 
 export function renderCastRow(rowEl, cast) {
     rowEl.innerHTML = '';
-    const lookup = {};
+    const lookup = Object.create(null);
     (cast || []).forEach((member) => {
+        const singerData = member || {};
         const singer = document.createElement('div');
-        singer.className = 'singer voice-' + esc(member.voice);
-        singer.dataset.castId = member.id;
-        singer.style.setProperty('--accent', safeColor(member.color));
+        singer.className = 'singer voice-' + esc(singerData.voice);
+        singer.dataset.castId = String(singerData.id == null ? '' : singerData.id);
+        singer.setAttribute('role', 'listitem');
+        singer.style.setProperty('--accent', safeColor(singerData.color));
         singer.innerHTML = `
-      <div class="char">${buildCharacterSVG(member)}</div>
+      <div class="char">${buildCharacterSVG(singerData)}</div>
       <div class="nameplate">
-        <strong>${esc(member.name)}</strong>
-        <span>${esc(member.role)}</span>
+        <strong>${esc(singerData.name)}</strong>
+        <span>${esc(singerData.role)}</span>
       </div>`;
         rowEl.appendChild(singer);
-        lookup[member.id] = singer;
+        lookup[singerData.id] = singer;
     });
     return lookup;
 }

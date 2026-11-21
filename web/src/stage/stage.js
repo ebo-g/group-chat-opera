@@ -8,24 +8,45 @@ let ui = {};
 let castRowEl = null;
 let singerMap = {};
 let currentCast = null;
+let activeSinger = null;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Resolves when `el` finishes its transform transition (with a safety timeout).
+function parseTime(value) {
+    const time = String(value).trim();
+    if (time.endsWith('ms')) return Number.parseFloat(time) || 0;
+    if (time.endsWith('s')) return (Number.parseFloat(time) || 0) * 1000;
+    return 0;
+}
+
+function transitionDurationMs(el) {
+    const style = window.getComputedStyle(el);
+    const durations = style.transitionDuration.split(',').map(parseTime);
+    const delays = style.transitionDelay.split(',').map(parseTime);
+    return Math.max(0, ...durations.map((duration, index) => duration + delays[index % delays.length]));
+}
+
+// Resolves when `el` finishes its transform transition, without stalling when
+// transitions are disabled (for example by the reduced-motion preference).
 function transitionDone(el, maxMs = 2800) {
+    const duration = transitionDurationMs(el);
+    if (duration <= 1) return Promise.resolve();
+
     return new Promise((resolve) => {
         let finished = false;
+        let timer;
         const finish = () => {
             if (finished) return;
             finished = true;
             el.removeEventListener('transitionend', onEnd);
+            window.clearTimeout(timer);
             resolve();
         };
         const onEnd = (e) => {
             if (e.target === el && e.propertyName === 'transform') finish();
         };
         el.addEventListener('transitionend', onEnd);
-        setTimeout(finish, maxMs);
+        timer = window.setTimeout(finish, Math.min(maxMs, duration + 100));
     });
 }
 
@@ -33,27 +54,37 @@ function countWords(text) {
     return String(text || '').trim().split(/\s+/).filter(Boolean).length;
 }
 
-function moveSpotlightTo(el) {
+function updateSpotlightPosition() {
+    if (!root || !activeSinger || !ui.spotlight) return;
     const stageRect = root.getBoundingClientRect();
-    const rect = el.getBoundingClientRect();
+    const rect = activeSinger.getBoundingClientRect();
     ui.spotlight.style.left = rect.left - stageRect.left + rect.width / 2 + 'px';
+}
+
+function moveSpotlightTo(el) {
+    activeSinger = el;
+    updateSpotlightPosition();
     ui.spotlight.classList.add('on');
 }
 
 function clearSinging() {
     Object.values(singerMap).forEach((el) => el.classList.remove('singing'));
+    activeSinger = null;
 }
 
 export function initStage(containerEl, cast) {
+    window.removeEventListener('resize', updateSpotlightPosition);
     containerEl.innerHTML = '';
     root = document.createElement('div');
     root.className = 'stage-root';
+    root.setAttribute('role', 'region');
+    root.setAttribute('aria-label', 'Opera stage');
     root.innerHTML = `
     <div class="stage-backdrop"></div>
     <div class="spotlight"></div>
     <div class="stage-floor"></div>
-    <div class="cast-row"></div>
-    <div class="surtitles">
+    <div class="cast-row" role="list" aria-label="Cast"></div>
+    <div class="surtitles" role="status" aria-live="polite" aria-atomic="true">
       <div class="surtitle-speaker"></div>
       <div class="surtitle-lyric"></div>
       <div class="surtitle-direction"></div>
@@ -90,8 +121,10 @@ export function initStage(containerEl, cast) {
     castRowEl = ui.castRow;
     currentCast = cast;
     singerMap = renderCastRow(castRowEl, cast);
+    activeSinger = null;
 
     ui.bravo.addEventListener('click', spawnRoses);
+    window.addEventListener('resize', updateSpotlightPosition);
     return root;
 }
 
@@ -113,6 +146,14 @@ export async function showScene(scene) {
     MOODS.forEach((m) => root.classList.remove('mood-' + m));
     if (scene.mood) root.classList.add('mood-' + scene.mood);
 
+    clearSinging();
+    ui.spotlight.classList.remove('on');
+    ui.speaker.textContent = '';
+    ui.lyric.textContent = '';
+    ui.direction.textContent = '';
+    ui.emotion.textContent = '';
+    root.classList.remove('has-surtitle');
+
     ui.titleText.textContent = scene.title || '';
     ui.titleMood.textContent = scene.mood ? scene.mood : '';
     ui.titleCard.classList.add('show');
@@ -121,7 +162,7 @@ export async function showScene(scene) {
     await wait(700); // let the fade-out finish
 }
 
-export async function playLine(line, castMember) {
+export async function playLine(line, castMember, audioCompletion = Promise.resolve()) {
     clearSinging();
     const singerEl = castMember ? singerMap[castMember.id] : null;
     if (singerEl) {
@@ -137,9 +178,12 @@ export async function playLine(line, castMember) {
     root.classList.add('has-surtitle');
 
     const duration = Math.max(1200, countWords(line.lyric) * 350);
-    await wait(duration);
-
-    if (singerEl) singerEl.classList.remove('singing');
+    try {
+        await Promise.all([wait(duration), Promise.resolve(audioCompletion)]);
+    } finally {
+        if (singerEl) singerEl.classList.remove('singing');
+        if (activeSinger === singerEl) activeSinger = null;
+    }
 }
 
 export async function curtainCall(cast) {

@@ -7,41 +7,33 @@ import {
     closeCurtains,
     curtainCall,
 } from './stage/stage.js';
+import * as audio from './audio/index.js';
+import { onLibretto } from './landing/index.js';
 
-// ---- mount points (index.html only has #app) ----
 const app = document.getElementById('app');
+if (!app) throw new Error('Could not find the #app element.');
 
 const landingRoot = document.createElement('div');
 landingRoot.id = 'landing-root';
 const operaRoot = document.createElement('div');
 operaRoot.id = 'opera-root';
 operaRoot.style.display = 'none';
-app.append(landingRoot, operaRoot);
-
-// ---- teammate C's modules (optional until they exist) ----
-// import.meta.glob resolves at build time and returns {} if the file is missing,
-// so this never breaks the dev server while C's folders are still empty.
-const audioMods = import.meta.glob('./audio/index.js', { eager: true });
-const landingMods = import.meta.glob('./landing/index.js', { eager: true });
-const audioMod = Object.values(audioMods)[0] || {};
-const landingMod = Object.values(landingMods)[0] || {};
-
-const noop = () => Promise.resolve();
-const audio = {
-    sing: audioMod.sing || noop,
-    orchestra: audioMod.orchestra || noop,
-    overture: audioMod.overture || noop,
-    finale: audioMod.finale || noop,
-};
 
 let running = false;
 
 export async function runOpera(libretto) {
     if (running) return;
+    if (!libretto || !Array.isArray(libretto.cast) || !Array.isArray(libretto.scenes)) {
+        console.error('Opera cannot start: the libretto is missing its cast or scenes.');
+        return;
+    }
+
     running = true;
     try {
         landingRoot.style.display = 'none';
+        landingRoot.setAttribute('aria-hidden', 'true');
         operaRoot.style.display = 'block';
+        operaRoot.removeAttribute('aria-hidden');
 
         initStage(operaRoot, libretto.cast);
         await Promise.all([openCurtains(), audio.overture()]);
@@ -56,7 +48,8 @@ export async function runOpera(libretto) {
                     console.warn('No cast member for line.cast =', line.cast);
                     continue;
                 }
-                await Promise.all([playLine(line, castMember), audio.sing(line, castMember)]);
+                const singing = Promise.resolve().then(() => audio.sing(line, castMember));
+                await Promise.all([playLine(line, castMember, singing), singing]);
             }
         }
 
@@ -64,18 +57,28 @@ export async function runOpera(libretto) {
         await curtainCall(libretto.cast);
     } catch (err) {
         console.error('Opera failed:', err);
+        operaRoot.style.display = 'none';
+        operaRoot.setAttribute('aria-hidden', 'true');
+        landingRoot.style.display = '';
+        landingRoot.removeAttribute('aria-hidden');
     } finally {
         running = false;
     }
 }
 
-// ---- startup ----
-if (typeof landingMod.onLibretto === 'function') {
-    landingMod.onLibretto(runOpera);
-} else {
-    // standalone preview: landing isn't wired up yet
-    fetch('/mock-libretto.json')
-        .then((res) => res.json())
-        .then(runOpera)
-        .catch((err) => console.error('Could not load mock libretto:', err));
+export async function previewOpera() {
+    const response = await fetch('/mock-libretto.json');
+    if (!response.ok) throw new Error(`Could not load the mock libretto (${response.status}).`);
+    await runOpera(await response.json());
+}
+
+// Render the landing page before wrapping its live DOM, so the landing module's
+// event listeners and #app-scoped queries continue to work after mounting.
+onLibretto(runOpera);
+while (app.firstChild) landingRoot.appendChild(app.firstChild);
+app.append(landingRoot, operaRoot);
+
+// The mock stage is available on demand without replacing the normal landing flow.
+if (new URLSearchParams(window.location.search).get('preview') === '1') {
+    previewOpera().catch((err) => console.error('Could not load mock libretto:', err));
 }
