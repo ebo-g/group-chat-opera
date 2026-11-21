@@ -59,6 +59,13 @@ let fallbackOscillators = [];
 let fallbackLevel = 0.62;
 let speechQueue = Promise.resolve();
 let singingMode = 'sung';
+let castVoiceMap = new Map();
+let castEngineMap = new Map();
+let lineNumbers = new WeakMap();
+let lineAudio = new WeakMap();
+let audioUrls = new Set();
+let speechVoiceCatalog = [];
+let nextLineNumber = 0;
 
 export function setSingingMode(mode) {
   singingMode = mode === 'speech' ? 'speech' : 'sung';
@@ -249,6 +256,7 @@ function fanfare(notes, gap = 0.2) {
 
 export async function overture() {
   if (!unlocked) return;
+  if (!speechVoiceCatalog.length) speechVoiceCatalog = await waitForSpeechVoices();
   await primeAudio();
   await orchestra('triumphant');
   await fanfare(['C4', 'E4', 'G4', 'C5', 'E5', 'G5'], 0.22);
@@ -271,12 +279,19 @@ function castKey(castMember) {
   return String(castMember?.id || castMember?.name || castMember?.character || castMember?.voice || 'chorus');
 }
 
+function voicePool(voiceType) {
+  return voiceType === 'soprano' || voiceType === 'alto' ? 'female' : 'male';
+}
+
 function timbreFor(castMember) {
   const key = castKey(castMember);
   if (!castTimbres.has(key)) {
-    const profile = VOICE[castMember?.voice] || VOICE.alto;
-    const supportedWaves = new Set(['sine', 'triangle', 'sawtooth', 'square']);
-    castTimbres.set(key, supportedWaves.has(profile.wave) ? profile.wave : 'sine');
+    const pool = voicePool(castMember?.voice);
+    const count = [...castTimbres.keys()].filter((entry) => entry.startsWith(`${pool}:`)).length;
+    const waves = pool === 'female' ? ['sine', 'triangle'] : ['sawtooth', 'square', 'triangle'];
+    const wave = waves[count % waves.length];
+    castTimbres.set(key, wave);
+    castTimbres.set(`${pool}:${key}`, wave);
   }
   return castTimbres.get(key);
 }
@@ -351,20 +366,75 @@ function singSynth(line, castMember) {
   return new Promise((resolve) => window.setTimeout(() => { duckMusic(false); resolve(); }, Math.max(350, notes.length * step * 1000)));
 }
 
-function hashString(value) {
-  let hash = 2166136261;
-  for (const character of String(value)) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
-  return hash >>> 0;
+function classifySpeechVoice(voice) {
+  const explicit = String(voice.gender || voice.metadata?.gender || '').toLowerCase();
+  if (/female|woman/.test(explicit)) return 'female';
+  if (/male|man/.test(explicit)) return 'male';
+  const name = `${voice.name} ${voice.lang}`.toLowerCase();
+  if (/\bfemale\b|samantha|victoria|karen|moira|tessa|fiona|ava\b|allison|zira|susan|serena|zoe\b|aria\b|jenny\b|helen\b|janet\b|clara\b|matilda\b/.test(name)) return 'female';
+  if (/\bmale\b|alex\b|daniel|fred\b|rishi|arthur|oliver|lee\b|guy\b|david|mark\b|tom\b|james|aaron|geoffrey|craig\b|adam\b|goliath/.test(name)) return 'male';
+  return 'unknown';
 }
 
-function selectVoice(castMember) {
-  const voices = window.speechSynthesis.getVoices();
-  const english = voices.filter((voice) => /^en(?:[-_]|$)/i.test(voice.lang || ''));
-  const natural = english.filter((voice) => /natural|enhanced|premium/i.test(voice.name || ''));
-  const candidates = natural.length ? natural : english.length ? english : voices;
-  if (!candidates.length) return null;
-  const identity = castMember?.id ?? castMember?.name ?? castMember?.voice ?? 'singer';
-  return candidates[hashString(identity) % candidates.length];
+function speechVoiceRank(voice) {
+  if (/natural/i.test(voice.name)) return 0;
+  if (/google/i.test(voice.name)) return 1;
+  return 2;
+}
+
+function assignCastVoices(cast, voices) {
+  const english = voices.filter((voice) => /^en[-_]/i.test(voice.lang || ''));
+  const sorted = [...(english.length ? english : voices)].sort((a, b) => speechVoiceRank(a) - speechVoiceRank(b) || a.name.localeCompare(b.name));
+  const used = { female: new Set(), male: new Set() };
+  const map = new Map();
+  for (const member of cast) {
+    const pool = voicePool(member.voice);
+    const matching = sorted.filter((voice) => classifySpeechVoice(voice) === pool);
+    const unknown = sorted.filter((voice) => classifySpeechVoice(voice) === 'unknown');
+    const choices = matching.length ? [...matching, ...unknown] : unknown.length ? unknown : sorted;
+    const voice = choices.find((candidate) => !used[pool].has(candidate))
+      || choices[map.size % Math.max(1, choices.length)] || null;
+    if (voice) used[pool].add(voice);
+    map.set(castKey(member), { voice, pool, label: voice?.name || `${pool} system voice` });
+  }
+  return map;
+}
+
+function waitForSpeechVoices() {
+  if (!('speechSynthesis' in window)) return Promise.resolve([]);
+  const speech = window.speechSynthesis;
+  const current = speech.getVoices();
+  if (current.length) return Promise.resolve(current);
+  return new Promise((resolve) => {
+    let complete = false;
+    const finish = () => {
+      if (complete) return;
+      complete = true;
+      window.clearTimeout(timer);
+      speech.removeEventListener?.('voiceschanged', onChanged);
+      resolve(speech.getVoices());
+    };
+    const onChanged = () => { if (speech.getVoices().length) finish(); };
+    const timer = window.setTimeout(finish, 4000);
+    speech.addEventListener?.('voiceschanged', onChanged);
+    speech.getVoices();
+  });
+}
+
+function getSpeechAssignment(castMember) {
+  const key = castKey(castMember);
+  if (castVoiceMap.has(key)) return castVoiceMap.get(key);
+  const pool = voicePool(castMember?.voice);
+  const english = speechVoiceCatalog.filter((voice) => /^en[-_]/i.test(voice.lang || ''));
+  const sorted = [...(english.length ? english : speechVoiceCatalog)].sort((a, b) => speechVoiceRank(a) - speechVoiceRank(b) || a.name.localeCompare(b.name));
+  const matching = sorted.filter((voice) => classifySpeechVoice(voice) === pool);
+  const unknown = sorted.filter((voice) => classifySpeechVoice(voice) === 'unknown');
+  const choices = matching.length ? [...matching, ...unknown] : unknown.length ? unknown : sorted;
+  const used = new Set([...castVoiceMap.values()].map((assignment) => assignment.voice).filter(Boolean));
+  const voice = choices.find((candidate) => !used.has(candidate)) || choices[0] || null;
+  const assignment = { voice, pool, label: voice?.name || `${pool} system voice` };
+  castVoiceMap.set(key, assignment);
+  return assignment;
 }
 
 function speakLine(line, castMember) {
@@ -380,7 +450,8 @@ function speakLine(line, castMember) {
     utterance.pitch = profile.pitch;
     utterance.rate = profile.rate;
     utterance.volume = 1;
-    utterance.voice = selectVoice(castMember);
+    const assignment = getSpeechAssignment(castMember);
+    utterance.voice = assignment.voice;
     if (utterance.voice?.lang) utterance.lang = utterance.voice.lang;
     let done = false;
     let timer;
@@ -403,9 +474,114 @@ function speakLine(line, castMember) {
   });
 }
 
-/** Perform a lyric using the selected vocal style and keep each singer in order. */
+function releasePreparedAudio() {
+  for (const url of audioUrls) URL.revokeObjectURL(url);
+  audioUrls = new Set();
+  lineAudio = new WeakMap();
+  lineNumbers = new WeakMap();
+  nextLineNumber = 0;
+}
+
+/** Freeze cast voices and preload spoken lines before the overture begins. */
+export async function prepareOpera(libretto) {
+  releasePreparedAudio();
+  castVoiceMap = new Map();
+  castEngineMap = new Map();
+  const cast = Array.isArray(libretto?.cast) ? libretto.cast : [];
+  const lines = (Array.isArray(libretto?.scenes) ? libretto.scenes : []).flatMap((scene) => scene.lines || []);
+  lines.forEach((line, index) => { if (line && typeof line === 'object') lineNumbers.set(line, index + 1); });
+
+  speechVoiceCatalog = await waitForSpeechVoices();
+  castVoiceMap = assignCastVoices(cast, speechVoiceCatalog);
+  for (const member of cast) castEngineMap.set(castKey(member), 'synth');
+  if (singingMode !== 'speech') return; // Do not spend ElevenLabs credits in sung mode.
+
+  const linesByCast = new Map();
+  for (const line of lines) {
+    const id = String(line?.cast || '');
+    if (!linesByCast.has(id)) linesByCast.set(id, []);
+    linesByCast.get(id).push(line);
+  }
+
+  await Promise.all(cast.map(async (member) => {
+    const id = castKey(member);
+    const memberLines = linesByCast.get(id) || [];
+    if (!memberLines.length) return;
+    const pool = voicePool(member.voice);
+    const blobs = [];
+    try {
+      // A character uses ElevenLabs only if every line is ready; otherwise discard this set.
+      for (const line of memberLines) {
+        const response = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: line.lyric || '', castId: id, voice: member.voice }),
+        });
+        if (!response.ok) throw new Error(`TTS endpoint returned ${response.status}`);
+        if (!(response.headers.get('content-type') || '').toLowerCase().startsWith('audio/')) {
+          throw new Error('TTS endpoint did not return audio');
+        }
+        blobs.push([line, await response.blob()]);
+      }
+      for (const [line, blob] of blobs) {
+        const url = URL.createObjectURL(blob);
+        lineAudio.set(line, url);
+        audioUrls.add(url);
+      }
+      castEngineMap.set(id, 'elevenlabs');
+    } catch (error) {
+      for (const [line] of blobs) lineAudio.delete?.(line);
+      castEngineMap.set(id, 'synth');
+      console.warn(`[opera-audio] ${member.name || id}: using ${pool} synth voice for the whole opera; ElevenLabs prefetch failed: ${error.message}`);
+    }
+  }));
+}
+
+function playPreparedAudio(line) {
+  const url = line && typeof line === 'object' ? lineAudio.get(line) : null;
+  if (!url) return Promise.resolve();
+  return new Promise((resolve) => {
+    const player = new Audio(url);
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      duckMusic(false);
+      resolve();
+    };
+    player.onended = finish;
+    player.onerror = finish;
+    duckMusic(true);
+    player.play().catch(finish);
+  });
+}
+
+function logLineEngine(line, castMember, engine, voice) {
+  const index = line && typeof line === 'object' ? lineNumbers.get(line) : undefined;
+  console.info('[opera-audio]', {
+    line: index ?? ++nextLineNumber,
+    castId: castKey(castMember),
+    character: castMember?.name || castKey(castMember),
+    engine,
+    voice,
+  });
+}
+
+/** Perform a lyric using one locked engine and voice for each character. */
 export function sing(line, castMember) {
-  const perform = () => singingMode === 'speech' ? speakLine(line, castMember) : singSynth(line, castMember);
+  const perform = () => {
+    const id = castKey(castMember);
+    if (singingMode !== 'speech') {
+      const engine = tone ? 'Tone.js synth' : 'Web Audio synth';
+      logLineEngine(line, castMember, engine, `${voicePool(castMember?.voice)} ${timbreFor(castMember)} (${castMember?.voice || 'alto'} range)`);
+      return singSynth(line, castMember);
+    }
+    const engine = castEngineMap.get(id) || 'synth';
+    const assignment = getSpeechAssignment(castMember);
+    const voice = engine === 'elevenlabs' ? `ElevenLabs ${castMember?.voice || assignment.pool} (${assignment.pool} pool)` : assignment.label;
+    logLineEngine(line, castMember, engine === 'elevenlabs' ? 'ElevenLabs' : 'speech synthesis', voice);
+    return engine === 'elevenlabs' ? playPreparedAudio(line) : speakLine(line, castMember);
+  };
   speechQueue = speechQueue.then(perform, perform);
   return speechQueue;
 }

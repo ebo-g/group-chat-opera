@@ -1,4 +1,4 @@
-import { primeAudio, setSingingMode } from '../audio/index.js';
+import { primeAudio, prepareOpera, setSingingMode } from '../audio/index.js';
 import './landing.css';
 
 const BACKSTAGE = [
@@ -112,6 +112,7 @@ export function onLibretto(callback) {
       const libretto = await response.json();
       if (!libretto || !Array.isArray(libretto.scenes)) throw new Error('The composer returned an unexpected libretto.');
       window.clearInterval(messageTimer);
+      await prepareOpera(libretto);
       if (typeof callback === 'function') callback(libretto);
     } catch (cause) {
       window.clearInterval(messageTimer);
