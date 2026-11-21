@@ -19,6 +19,26 @@ const operaRoot = document.createElement('div');
 operaRoot.id = 'opera-root';
 operaRoot.style.display = 'none';
 
+// Audio failures or stalled playback should not hold the visual performance.
+const guardedAudio = (play, timeoutMs) => (...args) => {
+    let timer;
+    const timeout = new Promise((resolve) => {
+        timer = window.setTimeout(resolve, timeoutMs);
+    });
+    return Promise.race([
+        Promise.resolve()
+            .then(() => play(...args))
+            .catch((err) => console.warn('audio error:', err)),
+        timeout,
+    ]).finally(() => window.clearTimeout(timer));
+};
+const performanceAudio = {
+    sing: guardedAudio(audio.sing, 35000),
+    orchestra: guardedAudio(audio.orchestra, 8000),
+    overture: guardedAudio(audio.overture, 8000),
+    finale: guardedAudio(audio.finale, 8000),
+};
+
 let running = false;
 
 export async function runOpera(libretto) {
@@ -36,11 +56,11 @@ export async function runOpera(libretto) {
         operaRoot.removeAttribute('aria-hidden');
 
         initStage(operaRoot, libretto.cast);
-        await Promise.all([openCurtains(), audio.overture()]);
+        await Promise.all([openCurtains(), performanceAudio.overture()]);
 
         for (const scene of libretto.scenes) {
             await showScene(scene);
-            await audio.orchestra(scene.mood);
+            await performanceAudio.orchestra(scene.mood);
 
             for (const line of scene.lines) {
                 const castMember = libretto.cast.find((c) => c.id === line.cast);
@@ -48,12 +68,12 @@ export async function runOpera(libretto) {
                     console.warn('No cast member for line.cast =', line.cast);
                     continue;
                 }
-                const singing = Promise.resolve().then(() => audio.sing(line, castMember));
+                const singing = performanceAudio.sing(line, castMember);
                 await Promise.all([playLine(line, castMember, singing), singing]);
             }
         }
 
-        await Promise.all([closeCurtains(), audio.finale()]);
+        await Promise.all([closeCurtains(), performanceAudio.finale()]);
         await curtainCall(libretto.cast);
     } catch (err) {
         console.error('Opera failed:', err);

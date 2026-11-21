@@ -8,6 +8,15 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+// One log line per API request (method, path, status, ms, cache). Never logs bodies or secrets.
+app.use('/api', (req, res, next) => {
+  const t0 = Date.now();
+  res.on('finish', () =>
+    console.log(`${req.method} ${req.baseUrl}${req.path} ${res.statusCode} ${Date.now() - t0}ms${res.get('X-Cache') ? ' cache=' + res.get('X-Cache') : ''}`),
+  );
+  next();
+});
+
 // {chatText} -> libretto JSON
 app.post('/api/libretto', async (req, res) => {
   const chatText = req.body?.chatText;
