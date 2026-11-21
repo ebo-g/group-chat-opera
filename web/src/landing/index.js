@@ -1,11 +1,11 @@
-import { primeAudio, setSingingMode } from '../audio/index.js';
+import { primeAudio } from '../audio/index.js';
 import './landing.css';
 
 const BACKSTAGE = [
-  'Tuning the violins…',
-  'Finding the most dramatic pause…',
-  'Warming up the chorus…',
-  'Setting the stage for one last “seen”…',
+  'Sharpening the bars…',
+  'Checking the rhymes, forsooth…',
+  'Warming up the mics…',
+  'Cueing the beat for one last “seen”…',
 ];
 
 /** Render the landing page and deliver a libretto to the caller when ready. */
@@ -17,12 +17,12 @@ export function onLibretto(callback) {
 
   root.innerHTML = `
     <main class="opera-landing">
-      <header class="opera-brand"><span class="opera-brand-mark" aria-hidden="true">✦</span> THE CHAT ROOM OPERA COMPANY</header>
+      <header class="opera-brand"><span class="opera-brand-mark" aria-hidden="true">✦</span> THE GROUP CHAT CYPHER</header>
       <section class="opera-intro" aria-labelledby="opera-title">
         <div class="opera-copy">
-          <p class="opera-eyebrow">A little drama, in three acts</p>
-          <h1 id="opera-title">Group Chat:<br><em>The Opera</em></h1>
-          <p class="opera-deck">Every missed reply has a story. Every “on my way” deserves an aria.</p>
+          <p class="opera-eyebrow">Three rounds. Zero chill.</p>
+          <h1 id="opera-title">Group Chat:<br><em>The Rap Battle</em></h1>
+          <p class="opera-deck">Every missed reply is a diss track waiting to happen. Your chat, rapped in Shakespearean English.</p>
           <div class="opera-upload-card">
             <label class="opera-dropzone" id="dropzone" for="chat-file">
               <span class="opera-upload-icon" aria-hidden="true">↑</span>
@@ -30,27 +30,25 @@ export function onLibretto(callback) {
               <span>or browse for a <b>.txt</b> file</span>
               <input id="chat-file" type="file" accept=".txt,text/plain" />
             </label>
-            <button class="opera-primary" id="perform-chat" type="button" disabled>Turn this chat into an opera <span aria-hidden="true">↗</span></button>
-            <button class="opera-voice-toggle" id="voice-mode" type="button" aria-pressed="false">Sung mode <span>On</span> · Spoken voices <span>Off</span></button>
-            <p class="opera-voice-note">Sung mode gives every character a fixed operatic voice and shows the words as surtitles. Spoken voices read the lyrics aloud instead.</p>
+            <button class="opera-primary" id="perform-chat" type="button" disabled>Turn this chat into a rap battle <span aria-hidden="true">↗</span></button>
             <div class="opera-divider"><span>or</span></div>
             <button class="opera-sample" id="use-sample" type="button">Use the sample chat <span aria-hidden="true">→</span></button>
-            <p class="opera-privacy">Use a fictional chat, or one every participant agrees to share. Its text is sent to the opera composer.</p>
+            <p class="opera-privacy">Use a fictional chat, or one every participant agrees to share. Its text is sent to the lyric writer.</p>
           </div>
         </div>
         <div class="opera-poster" aria-hidden="true">
           <div class="poster-halo"></div><div class="poster-curtain poster-curtain-left"></div><div class="poster-curtain poster-curtain-right"></div>
-          <div class="poster-stage"><span class="poster-star">✳</span><span class="poster-chat">…</span><span class="poster-caption">TONIGHT ONLY<br>ONE UNREAD MESSAGE</span></div>
-          <span class="poster-number">NO. 01 &nbsp; / &nbsp; THREE ACTS</span>
+          <div class="poster-stage"><span class="poster-star">✳</span><span class="poster-chat">…</span><span class="poster-caption">BATTLE TONIGHT<br>ONE UNREAD MESSAGE</span></div>
+          <span class="poster-number">ROUND 01 &nbsp; / &nbsp; THREE ROUNDS</span>
         </div>
       </section>
       <section class="opera-loading" id="loading" hidden aria-live="polite" aria-busy="true">
         <span class="loading-ornament" aria-hidden="true">✳</span><p class="opera-eyebrow">Backstage</p>
-        <h2 id="loading-message">Tuning the violins…</h2><div class="loading-rule"><i></i></div>
-        <p class="loading-note">Your curtain is about to rise.</p>
+        <h2 id="loading-message">Sharpening the bars…</h2><div class="loading-rule"><i></i></div>
+        <p class="loading-note">The beat is about to drop.</p>
       </section>
       <p class="opera-error" id="error" role="alert" hidden></p>
-      <footer class="opera-footer"><span>Made from messages, performed with feeling.</span><span>ACT I &nbsp;—&nbsp; THE BEGINNING</span></footer>
+      <footer class="opera-footer"><span>Made from messages, spat with feeling.</span><span>ROUND 1 &nbsp;—&nbsp; FIGHT</span></footer>
     </main>`;
 
   const input = root.querySelector('#chat-file');
@@ -58,21 +56,12 @@ export function onLibretto(callback) {
   const fileLabel = root.querySelector('#file-label');
   const perform = root.querySelector('#perform-chat');
   const sample = root.querySelector('#use-sample');
-  const voiceMode = root.querySelector('#voice-mode');
   const loading = root.querySelector('#loading');
   const loadingMessage = root.querySelector('#loading-message');
   const error = root.querySelector('#error');
   let chosenFile = null;
   let busy = false;
-  let speechEnabled = false;
   let messageTimer;
-
-  voiceMode.addEventListener('click', () => {
-    speechEnabled = !speechEnabled;
-    setSingingMode(speechEnabled ? 'speech' : 'sung');
-    voiceMode.setAttribute('aria-pressed', String(speechEnabled));
-    voiceMode.innerHTML = `Sung mode <span>${speechEnabled ? 'Off' : 'On'}</span> · Spoken voices <span>${speechEnabled ? 'On' : 'Off'}</span>`;
-  });
 
   function selectFile(file) {
     if (!file) return;
@@ -107,7 +96,7 @@ export function onLibretto(callback) {
       const response = await fetch('/api/libretto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatText }),
+        body: JSON.stringify({ chatText, genre: 'rap' }),
       });
       if (!response.ok) throw new Error(`The composer returned ${response.status}. Please try again.`);
       const libretto = await response.json();

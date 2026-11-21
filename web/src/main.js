@@ -1,5 +1,6 @@
 import './stage/stage.css';
 import './stage/castScreen.css';
+import './stage/rap.css';
 import { showCastScreen } from './stage/castScreen.js';
 import {
     initStage,
@@ -55,6 +56,11 @@ export async function runOpera(libretto) {
         landingRoot.style.display = 'none';
         landingRoot.setAttribute('aria-hidden', 'true');
         operaRoot.style.display = 'block';
+        // Rap mode: beat + spoken delivery + rap skin. Opera is the default.
+        const rap = libretto.genre !== 'opera'; // rap is the product; 'opera' only if a libretto asks for it
+        audio.setGenre?.(rap ? 'rap' : 'opera');
+        if (rap) audio.setSingingMode('speech');
+        operaRoot.classList.toggle('genre-rap', rap);
         operaRoot.removeAttribute('aria-hidden');
 
         const performance = await showCastScreen(libretto, audio);

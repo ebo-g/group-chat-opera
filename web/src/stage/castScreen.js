@@ -202,10 +202,10 @@ export function showCastScreen(libretto, audio = null) {
         const curtain = element('div', 'cast-screen__curtain');
         curtain.setAttribute('aria-hidden', 'true');
         const content = element('div', 'cast-screen__content');
-        const brand = element('p', 'cast-screen__brand', 'THE CHAT ROOM OPERA COMPANY');
-        const title = element('h1', 'cast-screen__title', 'Meet the Cast');
+        const brand = element('p', 'cast-screen__brand', 'THE GROUP CHAT CYPHER');
+        const title = element('h1', 'cast-screen__title', 'Pick Your MCs');
         title.id = 'cast-screen-title';
-        const introduction = element('p', 'cast-screen__intro', 'Choose the voice that feels right. Each singer will give you a little preview.');
+        const introduction = element('p', 'cast-screen__intro', 'Rename your MCs, set their voice, and hit preview. Then drop the beat.');
         const cards = element('div', 'cast-screen__cards');
         cards.setAttribute('role', 'list');
         if (cast.length) {
@@ -214,7 +214,7 @@ export function showCastScreen(libretto, audio = null) {
             cards.appendChild(element('p', 'cast-screen__empty', 'The company is still assembling.'));
         }
         const actions = element('div', 'cast-screen__actions');
-        const raiseCurtain = element('button', 'cast-screen__button', 'Raise the Curtain');
+        const raiseCurtain = element('button', 'cast-screen__button', 'Drop the Beat');
         raiseCurtain.type = 'button';
         raiseCurtain.addEventListener('click', async () => {
             if (confirming) return;

@@ -28,6 +28,38 @@ const STUB_CACHE_VERSION = 'stub-lyrics-v2';
 
 const SYSTEM = `You are a brilliant comic-opera librettist. You rewrite group chats as comic operas.
 Reply with JSON ONLY: no markdown, no code fences, no commentary.`;
+const SYSTEM_RAP = `You are a rap battle lyricist who writes only in Shakespearean English. You rewrite group chats as rap battles.
+Reply with JSON ONLY: no markdown, no code fences, no commentary.`;
+
+export const GENRES = ['opera', 'rap'];
+
+function buildRapPrompt(senders, transcript) {
+  return `Rewrite this group chat as a RAP BATTLE written entirely in SHAKESPEAREAN ENGLISH (thee/thou/thy, doth, 'tis, wherefore, prithee, forsooth, knave...), but with real rap flow: punchy bars, internal rhymes, end-rhyme couplets, boasts, insults and comebacks.
+
+People (the MCs): ${senders.join(', ')}
+
+Requirements:
+- Give each person a clear MC persona from how they behave in the chat (the boaster, the villain, the underdog, the hype man, the one who never replies...).
+- Exactly 3 scenes (rounds), each with 6-10 lines, with an arc (opening cyphers, a heated exchange, a closing flex). Each "lyric" is a couplet of two rhyming bars, rhythmic and speakable, about 8-14 words.
+- Quote or paraphrase REAL messages from the chat where funny, turned into Shakespearean bars.
+- Keep it playful and PG-13: roast the behaviour, never attack a person's body or identity.
+- Use only these people, one cast entry each. ids "c1", "c2", ... in the order given.
+- "voice": one of soprano, alto, tenor, baritone, bass: pick by the person's likely sex and vocal feel (soprano/alto = female, tenor/baritone/bass = male; use the name and pronoun clues in the chat; if unsure pick alto or tenor).
+- "sex": "female" or "male", consistent with the voice. "voiceConfidence": "high" if the name/pronouns make it clear, otherwise "low".
+- "color": distinct #rrggbb hex.
+- "mood" per scene: one of tense, romantic, comic, tragic, triumphant (it sets the beat).
+- "direction" = a short stage direction (a gesture or mic move); "emotion" = one word.
+- Never include phone numbers or other personal details.
+
+Output JSON ONLY in exactly this shape:
+{"title": string,
+ "cast": [{"id": "c1", "name": string, "role": string, "voice": string, "sex": "female"|"male", "voiceConfidence": "high"|"low", "color": "#hex"}],
+ "scenes": [{"title": string, "mood": string,
+   "lines": [{"cast": "c1", "lyric": string, "direction": string, "emotion": string}]}]}
+
+CHAT:
+${transcript}`;
+}
 
 /** Returns an array of problems; empty array = valid. */
 export function validateLibretto(l) {
@@ -63,8 +95,9 @@ export function validateLibretto(l) {
   return errs;
 }
 
-function buildPrompt(senders, messages) {
+function buildPrompt(senders, messages, genre = 'opera') {
   const transcript = messages.map((m) => `${m.sender}: ${m.text.replace(/\n/g, ' / ')}`).join('\n');
+  if (genre === 'rap') return buildRapPrompt(senders, transcript);
   return `Rewrite this group chat as a COMIC OPERA.
 
 People (the cast): ${senders.join(', ')}
@@ -104,12 +137,12 @@ function extractJson(text) {
   }
 }
 
-async function generate(senders, messages) {
-  const prompt = buildPrompt(senders, messages);
+async function generate(senders, messages, genre = 'opera') {
+  const prompt = buildPrompt(senders, messages, genre);
   let user = prompt;
   let lastErr = [];
   for (let attempt = 0; attempt < 2; attempt++) {
-    const raw = await complete({ system: SYSTEM, user, senders, messages });
+    const raw = await complete({ system: genre === 'rap' ? SYSTEM_RAP : SYSTEM, user, senders, messages });
     try {
       const l = extractJson(raw);
       lastErr = validateLibretto(l);
@@ -125,7 +158,8 @@ async function generate(senders, messages) {
 }
 
 /** chatText -> libretto, cached on disk by hash of the input. */
-export async function makeLibretto(chatText) {
+export async function makeLibretto(chatText, genre = 'rap') {
+  if (!GENRES.includes(genre)) genre = 'rap'; // rap battle in Shakespearean English is the product
   const parsed = parseChat(chatText);
   if (parsed.length < 3) {
     const err = new Error('No chat messages found. Is this a WhatsApp .txt export?');
@@ -139,14 +173,15 @@ export async function makeLibretto(chatText) {
 
   // Key includes provider+model so stub output never shadows real output.
   const key = createHash('sha256')
-    .update(JSON.stringify([config.provider, config.provider === 'stub' ? STUB_CACHE_VERSION : config.model, senders, messages]))
+    .update(JSON.stringify([config.provider, config.provider === 'stub' ? STUB_CACHE_VERSION : config.model, senders, messages, ...(genre === 'opera' ? [] : [genre])]))
     .digest('hex');
   const file = new URL(`${key}.json`, config.cacheDir);
   try {
     return { libretto: normalizeCast(JSON.parse(await readFile(file, 'utf8'))), cached: true };
   } catch {}
 
-  const libretto = normalizeCast(await generate(senders, messages));
+  const libretto = normalizeCast(await generate(senders, messages, genre));
+  libretto.genre = genre;
   await mkdir(config.cacheDir, { recursive: true });
   await writeFile(file, JSON.stringify(libretto, null, 2));
   return { libretto, cached: false };

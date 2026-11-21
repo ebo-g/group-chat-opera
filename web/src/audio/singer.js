@@ -122,10 +122,17 @@ export function syllabify(text) {
  * Same (character, lyric, mood) always gives the same phrase.
  */
 export function planPhrase(text, member, mood) {
+  return planFromSyllables(syllabify(text), member, mood, text);
+}
+
+/**
+ * Same as planPhrase, but from an explicit syllable list [{vowel, stress, breath, end}].
+ * The word-singing engine uses this with the syllable count it actually heard in the speech.
+ */
+export function planFromSyllables(syl, member, mood, text = '') {
   const profile = singerProfile(member);
   const style = MOOD_STYLE[mood] || MOOD_STYLE.comic;
   const scale = SCALES[style.scale];
-  const syl = syllabify(text);
   if (syl.length > MAX_SYLLABLES) syl.splice(MAX_SYLLABLES - 1, syl.length - MAX_SYLLABLES); // keep the final (cadence) syllable
   if (!syl.length) syl.push({ vowel: 'a', stress: 1, breath: 0, end: '' });
   const n = syl.length;
@@ -175,10 +182,10 @@ export function planPhrase(text, member, mood) {
   return { notes, total: t };
 }
 
-const midiToHz = (midi) => 440 * 2 ** ((midi - 69) / 12);
+export const midiToHz = (midi) => 440 * 2 ** ((midi - 69) / 12);
 
 const buses = new WeakMap();
-function voiceBus(ctx, destination) {
+export function voiceBus(ctx, destination) {
   let bus = buses.get(ctx);
   if (bus) return bus;
   const dry = ctx.createGain();

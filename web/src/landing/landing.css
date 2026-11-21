@@ -60,3 +60,8 @@ body { margin:0; background:var(--opera-bg); color:var(--opera-cream); font-fami
 @media(max-width:800px) { .opera-intro { grid-template-columns:1fr; gap:30px; padding-top:50px; } .opera-copy { max-width:620px; margin:auto; width:100%; } .opera-poster { width:min(86%,360px); } }
 @media(max-width:480px) { .opera-landing { padding:22px 18px 16px; } .opera-copy h1 { font-size:54px; } .opera-upload-card { padding:12px; } .opera-footer { font-size:7px; } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; transition-duration:.01ms !important; } }
+
+/* Rap re-skin: the poster is a neon cypher wall instead of theatre curtains. */
+.poster-curtain { background: repeating-linear-gradient(115deg, #2a0a3d 0 16px, #54127f 16px 32px) !important; filter: none !important; }
+.poster-halo { background: radial-gradient(circle, rgba(255, 45, 149, 0.55), transparent 65%) !important; }
+.opera-brand-mark, .poster-star { color: #ff2d95 !important; }

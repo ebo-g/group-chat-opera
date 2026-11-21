@@ -1,4 +1,6 @@
 import { singPhrase, singerProfile } from './singer.js';
+import { startWordSongs, playWordSong } from './wordsong-engine.js';
+import { startBeat, stopBeat, duckBeat } from './beat.js';
 const TONE_URL = 'https://esm.sh/tone@15.1.22';
 const MOODS = {
   tense: {
@@ -59,6 +61,15 @@ let audioUrls = new Set();
 let speechVoiceCatalog = [];
 let speechVoiceLoadPromise;
 let nextLineNumber = 0;
+let wordSongs = new Map(); // lyric line -> Promise<{buffer, source}|null>: the real words, sung
+let wordSongRun = 0;
+
+let genre = 'opera';
+/** 'rap' swaps the orchestra for a drum beat; anything else is the opera. */
+export function setGenre(value) {
+  genre = value === 'rap' ? 'rap' : 'opera';
+  if (genre !== 'rap') stopBeat();
+}
 
 export function setSingingMode(mode) {
   singingMode = mode === 'speech' ? 'speech' : 'sung';
@@ -186,6 +197,7 @@ export async function orchestra(mood = 'comic') {
   await primeAudio();
   const chosen = MOODS[mood] ? mood : 'comic';
   activeMood = chosen;
+  if (genre === 'rap') { startBeat(getContext(), chosen); return; }
   if (!tone || !pad || !melody || !bass || !toneMusic) { startFallback(chosen); return; }
 
   fadeTone(0, 0.45);
@@ -212,6 +224,7 @@ export async function orchestra(mood = 'comic') {
 }
 
 function stopOrchestra() {
+  stopBeat();
   if (repeatId !== undefined && tone?.Transport) {
     tone.Transport.clear(repeatId);
     repeatId = undefined;
@@ -252,6 +265,7 @@ export async function overture() {
   if (!speechVoiceCatalog.length) speechVoiceCatalog = await waitForSpeechVoices();
   await primeAudio();
   await orchestra('triumphant');
+  if (genre === 'rap') return;
   await fanfare(['C4', 'E4', 'G4', 'C5', 'E5', 'G5'], 0.22);
 }
 
@@ -259,11 +273,12 @@ export async function finale() {
   if (!unlocked) return;
   await primeAudio();
   await orchestra('triumphant');
-  await fanfare(['C4', 'G4', 'C5', 'E5', 'G5', 'C6'], 0.16);
+  if (genre !== 'rap') await fanfare(['C4', 'G4', 'C5', 'E5', 'G5', 'C6'], 0.16);
   stopOrchestra();
 }
 
 function duckMusic(isDucked) {
+  duckBeat(isDucked);
   if (toneVolume && tone?.now) toneVolume.volume.rampTo(isDucked ? -23 : -18, 0.18);
   if (fallbackBus && audioContext) fallbackBus.gain.setTargetAtTime(isDucked ? fallbackLevel * 0.55 : fallbackLevel, audioContext.currentTime, 0.18);
 }
@@ -289,17 +304,40 @@ function normalizeLyricText(line) {
   return /[\p{L}\p{N}]/u.test(lyric) ? lyric : '';
 }
 
-/** Sing a lyric as a vocalise with this character's fixed voice (see singer.js). */
-function sungLine(line, castMember) {
-  const text = normalizeLyricText(line);
-  if (!text) return Promise.resolve();
-  const context = getContext();
+/** Wordless fallback: sing the lyric as a vocalise with this character's fixed voice (see singer.js). */
+function vocalise(text, castMember, context) {
   duckMusic(true);
-  let seconds = Math.max(0.35, text.split(/\s+/).length * 0.3);
+  let seconds = Math.max(0.35, text.split(/s+/).length * 0.3);
   if (context?.state === 'running') {
     seconds = singPhrase(context, context.destination, text, castMember, activeMood, context.currentTime + 0.03);
   }
   return new Promise((resolve) => window.setTimeout(() => { duckMusic(false); resolve(); }, Math.max(350, seconds * 1000 + 250)));
+}
+
+const WORD_SONG_WAIT_MS = 9000;
+
+/** Sing one lyric: the real words if their rendering is ready in time, otherwise the vocalise. */
+async function sungLine(line, castMember) {
+  const text = normalizeLyricText(line);
+  if (!text) return;
+  const context = getContext();
+  const profile = singerProfile(castMember);
+  const prepared = line && typeof line === 'object' ? wordSongs.get(line) : undefined;
+  if (prepared && context?.state === 'running') {
+    const song = await Promise.race([prepared, new Promise((resolve) => window.setTimeout(() => resolve(null), WORD_SONG_WAIT_MS))]);
+    if (song) {
+      logLineEngine(line, castMember, `sung words (${song.source})`, `${profile.sex} ${profile.voice}, ${song.heard}/${song.expected} syllables`);
+      duckMusic(true);
+      try {
+        await playWordSong(context, song.buffer);
+      } finally {
+        duckMusic(false);
+      }
+      return;
+    }
+  }
+  logLineEngine(line, castMember, 'sung vocalise (words unavailable)', `${profile.sex} ${profile.voice} (fixed per character)`);
+  await vocalise(text, castMember, context);
 }
 
 function classifySpeechVoice(voice) {
@@ -449,6 +487,8 @@ function releasePreparedAudio() {
   lineAudio = new WeakMap();
   lineNumbers = new WeakMap();
   nextLineNumber = 0;
+  wordSongRun += 1; // stops any background rendering of the previous opera
+  wordSongs = new Map();
 }
 
 /** Freeze cast voices and preload spoken lines before the overture begins. */
@@ -463,7 +503,24 @@ export async function prepareOpera(libretto) {
   speechVoiceCatalog = await loadSpeechVoiceCatalog();
   castVoiceMap = assignCastVoices(cast, speechVoiceCatalog);
   for (const member of cast) castEngineMap.set(castKey(member), 'synth');
-  if (singingMode !== 'speech') return; // Do not spend ElevenLabs credits in sung mode.
+  if (singingMode !== 'speech') {
+    // Sing the real words: speech (ElevenLabs if configured, else eSpeak) retuned onto the melody.
+    // Rendering continues in the background; only the first lines are awaited before curtain-up.
+    const run = wordSongRun;
+    const context = getContext();
+    if (context) {
+      const started = startWordSongs({
+        cast,
+        scenes: Array.isArray(libretto?.scenes) ? libretto.scenes : [],
+        context,
+        isCurrent: () => run === wordSongRun,
+        normalize: normalizeLyricText,
+      });
+      wordSongs = started.songs;
+      await started.ready;
+    }
+    return;
+  }
 
   const linesByCast = new Map();
   for (const line of lines) {
@@ -541,8 +598,6 @@ export function sing(line, castMember) {
   const perform = () => {
     const id = castKey(castMember);
     if (singingMode !== 'speech') {
-      const profile = singerProfile(castMember);
-      logLineEngine(line, castMember, 'sung voice', `${profile.sex} ${profile.voice} (fixed per character)`);
       return sungLine(line, castMember);
     }
     const engine = castEngineMap.get(id) || 'synth';

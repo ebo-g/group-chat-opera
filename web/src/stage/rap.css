@@ -1,0 +1,16 @@
+/* Rap skin: applied when the libretto's genre is "rap" (see main.js). Opera is untouched. */
+.genre-rap .stage-backdrop {
+  background:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.04) 0 2px, transparent 2px 26px),
+    radial-gradient(ellipse at 50% 0%, #6a1b9a 0%, #1a0b2e 55%, #07030f 100%);
+}
+.genre-rap .stage-floor { background: linear-gradient(#232323, #0c0c0c); border-top: 3px solid #ff2d95; box-shadow: 0 -6px 24px rgba(255, 45, 149, 0.45); }
+.genre-rap .valance { display: none; }
+.genre-rap .curtain { filter: saturate(0.2) brightness(0.4); }
+.genre-rap .spotlight { filter: hue-rotate(250deg) saturate(1.8); }
+.genre-rap .nameplate strong { font-family: Impact, 'Arial Black', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #fffb00; text-shadow: 0 0 8px rgba(255, 45, 149, 0.8); }
+.genre-rap .surtitle-lyric, .genre-rap .title-card-text { font-family: Impact, 'Arial Black', sans-serif; letter-spacing: 0.04em; text-transform: uppercase; }
+.genre-rap .surtitles { border: 2px solid #ff2d95; box-shadow: 0 0 18px rgba(255, 45, 149, 0.55); }
+.genre-rap .singer.singing .char { animation: rap-bounce 0.46s ease-in-out infinite; }
+@keyframes rap-bounce { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-9px) rotate(2deg); } }
+@media (prefers-reduced-motion: reduce) { .genre-rap .singer.singing .char { animation: none; } }

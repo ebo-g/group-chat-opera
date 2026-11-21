@@ -25,7 +25,7 @@ app.post('/api/libretto', async (req, res) => {
     return res.status(400).json({ error: 'chatText (string) is required' });
   }
   try {
-    const { libretto, cached } = await makeLibretto(chatText);
+    const { libretto, cached } = await makeLibretto(chatText, req.body?.genre);
     res.set('X-Cache', cached ? 'HIT' : 'MISS').json(libretto);
   } catch (e) {
     console.error('libretto error:', e.message); // never log tokens or chat content
