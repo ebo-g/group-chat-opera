@@ -212,3 +212,14 @@
 @media (prefers-reduced-motion: reduce) {
     .cast-voice__label, .cast-screen__button { transition: none; }
 }
+/* Name / sex controls and the live character preview */
+.cast-card__avatar { height: 130px; display: flex; justify-content: center; margin: 6px 0 4px; }
+.cast-card__avatar .char-svg { height: 130px; width: auto; max-width: 100%; }
+.cast-fields { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 8px 0; }
+.cast-field { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.95; }
+.cast-field__input {
+  font: inherit; font-size: 0.95rem; letter-spacing: normal; text-transform: none;
+  padding: 6px 8px; border-radius: 6px; border: 1px solid var(--cast-accent, #d4af37);
+  background: rgba(0, 0, 0, 0.35); color: inherit; min-width: 0;
+}
+.cast-field__input:focus-visible { outline: 2px solid var(--cast-accent, #d4af37); outline-offset: 1px; }

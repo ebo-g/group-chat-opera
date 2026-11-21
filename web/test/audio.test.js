@@ -179,11 +179,12 @@ test('spoken voice prefetch uses the same slash-free lyric text', async () => {
   }
 });
 
-test('sung mode performs the lyric with a mood-shaped melodic voice', async () => {
+test('sung mode sings the lyric as a formant-filtered voice instead of speaking it', async () => {
   await primeAudio();
   await orchestra('tragic');
   setSingingMode('sung');
-  const previousCount = utterances.length;
+  const firstSungOscillator = oscillators.length;
+  const spokenBefore = utterances.length;
   const performance = sing('Ah, the night is full of hope.', { id: 'sung-baritone', voice: 'baritone' });
   await new Promise((resolve) => setImmediate(resolve));
 
@@ -195,11 +196,11 @@ test('sung mode performs the lyric with a mood-shaped melodic voice', async () =
   }
   await performance;
 
-  const phrases = utterances.slice(previousCount);
-  assert.ok(phrases.length > 1, 'a lyric should be delivered as melodic phrases');
-  assert.ok(phrases.some((utterance) => /night|hope/i.test(utterance.text)), 'the sung voice should perform the actual lyric words');
-  assert.ok(new Set(phrases.map((utterance) => utterance.pitch)).size > 1, 'pitch should follow the current mood contour');
-  assert.ok(phrases.every((utterance) => utterance.rate < 0.95), 'melodic delivery should use a more expressive pace');
+  const sungOscillators = oscillators.slice(firstSungOscillator);
+  assert.ok(sungOscillators.length > 0, 'the line is sung by synthesized oscillators');
+  assert.ok(sungOscillators.every((oscillator) => ['sine', 'triangle', 'sawtooth', 'square'].includes(oscillator.type)));
+  assert.ok(sungOscillators.some((oscillator) => oscillator.type === 'sawtooth'), 'the sung voice is a formant-filtered sawtooth source');
+  assert.equal(utterances.length, spokenBefore, 'sung mode does not use speech synthesis');
 });
 
 test('scene changes replace accompaniment and the finale stops its loop', async () => {

@@ -31,8 +31,8 @@ export function onLibretto(callback) {
               <input id="chat-file" type="file" accept=".txt,text/plain" />
             </label>
             <button class="opera-primary" id="perform-chat" type="button" disabled>Turn this chat into an opera <span aria-hidden="true">↗</span></button>
-            <button class="opera-voice-toggle" id="voice-mode" type="button" aria-pressed="false">Melodic mode <span>On</span> · Spoken voices <span>Off</span></button>
-            <p class="opera-voice-note">Melodic mode shapes each lyric to the scene’s tune. Browser voices are expressive speech, not trained opera singers.</p>
+            <button class="opera-voice-toggle" id="voice-mode" type="button" aria-pressed="false">Sung mode <span>On</span> · Spoken voices <span>Off</span></button>
+            <p class="opera-voice-note">Sung mode gives every character a fixed operatic voice and shows the words as surtitles. Spoken voices read the lyrics aloud instead.</p>
             <div class="opera-divider"><span>or</span></div>
             <button class="opera-sample" id="use-sample" type="button">Use the sample chat <span aria-hidden="true">→</span></button>
             <p class="opera-privacy">Use a fictional chat, or one every participant agrees to share. Its text is sent to the opera composer.</p>
@@ -71,7 +71,7 @@ export function onLibretto(callback) {
     speechEnabled = !speechEnabled;
     setSingingMode(speechEnabled ? 'speech' : 'sung');
     voiceMode.setAttribute('aria-pressed', String(speechEnabled));
-    voiceMode.innerHTML = `Melodic mode <span>${speechEnabled ? 'Off' : 'On'}</span> · Spoken voices <span>${speechEnabled ? 'On' : 'Off'}</span>`;
+    voiceMode.innerHTML = `Sung mode <span>${speechEnabled ? 'Off' : 'On'}</span> · Spoken voices <span>${speechEnabled ? 'On' : 'Off'}</span>`;
   });
 
   function selectFile(file) {

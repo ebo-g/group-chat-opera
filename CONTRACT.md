@@ -10,6 +10,7 @@ into a **libretto** (JSON); the web app performs it.
 { "title": "string",
   "cast": [{ "id": "c1", "name": "string", "role": "string",
     "voice": "soprano|alto|tenor|baritone|bass",
+    "sex": "female|male",
     "voiceConfidence": "high|low",
     "color": "#hex" }],
   "scenes": [{ "title": "string",
@@ -19,7 +20,10 @@ into a **libretto** (JSON); the web app performs it.
 ```
 `voice` is chosen from the person's name plus chat clues (pronouns others use
 for them): soprano/alto for likely female, tenor/baritone/bass for likely male,
-alto or tenor when unsure. `voiceConfidence` is `"high"` when those clues are
+alto or tenor when unsure. `sex` picks the singer's body on stage (gown vs. coat) and is kept consistent with `voice`
+(soprano/alto = female, tenor/baritone/bass = male); consumers derive it from `voice` when it is missing.
+The cast screen lets the user rename characters, change `sex` and pick a `voice` before the show.
+`voiceConfidence` is `"high"` when those clues are
 clear, otherwise `"low"`. Librettos cached before this field existed lack it, so
 consumers should treat a missing value as `"low"`.
 

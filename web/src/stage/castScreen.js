@@ -1,4 +1,13 @@
+import { buildCharacterSVG, sexOf } from './characters.js';
+
 const VOICES = ['soprano', 'alto', 'tenor', 'baritone', 'bass'];
+const NAME_MAX = 24;
+// When the sex is changed, move the voice to the matching register.
+const VOICE_FOR_SEX = {
+    female: { tenor: 'soprano', baritone: 'alto', bass: 'alto' },
+    male: { soprano: 'tenor', alto: 'baritone' },
+};
+const originalNames = new WeakMap();
 const PREVIEW_LINE = 'La la la, it is I, la la la!';
 
 function safeColor(value) {
@@ -14,9 +23,31 @@ function element(tag, className, text) {
     return node;
 }
 
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, (char) => '\\' + char);
+
+/** Replace a renamed character's old name inside the libretto text (whole words only). */
+function applyRenames(libretto, cast) {
+    for (const member of cast) {
+        const oldName = originalNames.get(member);
+        if (!oldName || !member.name || member.name === oldName) continue;
+        const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(oldName)}(?![\\p{L}\\p{N}])`, 'gu');
+        const swap = (text) => (typeof text === 'string' ? text.replace(pattern, () => member.name) : text);
+        libretto.title = swap(libretto.title);
+        for (const scene of libretto.scenes || []) {
+            scene.title = swap(scene.title);
+            for (const line of scene.lines || []) {
+                line.lyric = swap(line.lyric);
+                line.direction = swap(line.direction);
+            }
+        }
+        originalNames.set(member, member.name);
+    }
+}
+
 function makeCastCard(member, index, requestPreview) {
     const castMember = member || {};
     const name = String(castMember.name || `Singer ${index + 1}`);
+    if (!originalNames.has(castMember)) originalNames.set(castMember, name);
     const color = safeColor(castMember.color);
     const card = element('article', 'cast-card');
     card.setAttribute('role', 'listitem');
@@ -49,10 +80,48 @@ function makeCastCard(member, index, requestPreview) {
     colorRow.append(swatch, element('span', '', `Costume colour ${color}`));
     card.appendChild(colorRow);
 
+    const avatar = element('div', 'cast-card__avatar');
+    avatar.setAttribute('aria-hidden', 'true');
+    const refreshAvatar = () => { avatar.innerHTML = buildCharacterSVG(castMember); };
+    refreshAvatar();
+    card.appendChild(avatar);
+
+    const fields = element('div', 'cast-fields');
+    const nameLabel = element('label', 'cast-field');
+    nameLabel.appendChild(element('span', '', 'Name'));
+    const nameInput = element('input', 'cast-field__input');
+    nameInput.type = 'text';
+    nameInput.value = name;
+    nameInput.maxLength = NAME_MAX;
+    nameInput.setAttribute('aria-label', `Name for ${name}`);
+    nameInput.addEventListener('input', () => {
+        const typed = String(nameInput.value).trim().slice(0, NAME_MAX);
+        castMember.name = typed || originalNames.get(castMember) || name; // never leave a singer nameless
+        title.textContent = castMember.name;
+        monogram.textContent = [...castMember.name][0]?.toUpperCase() || '♪';
+        refreshAvatar();
+    });
+    nameLabel.appendChild(nameInput);
+
+    const sexLabel = element('label', 'cast-field');
+    sexLabel.appendChild(element('span', '', 'Sex'));
+    const sexSelect = element('select', 'cast-field__input');
+    for (const value of ['female', 'male']) {
+        const option = element('option', '', value === 'female' ? 'Female' : 'Male');
+        option.value = value;
+        sexSelect.appendChild(option);
+    }
+    sexSelect.value = sexOf(castMember);
+    sexSelect.setAttribute('aria-label', `Sex for ${name}`);
+    sexLabel.appendChild(sexSelect);
+    fields.append(nameLabel, sexLabel);
+    card.appendChild(fields);
+
     const voiceFieldset = element('fieldset', 'cast-voices');
     voiceFieldset.appendChild(element('legend', '', 'Choose a voice'));
     const options = element('div', 'cast-voices__options');
     const selectedVoice = VOICES.includes(castMember.voice) ? castMember.voice : 'alto';
+    const voiceInputs = [];
     for (const voice of VOICES) {
         const label = element('label', 'cast-voice');
         const input = element('input');
@@ -64,13 +133,27 @@ function makeCastCard(member, index, requestPreview) {
         input.addEventListener('change', () => {
             if (!input.checked) return;
             castMember.voice = voice;
+            refreshAvatar();
             requestPreview(castMember);
         });
+        voiceInputs.push(input);
         label.append(input, labelText);
         options.appendChild(label);
     }
     voiceFieldset.appendChild(options);
     card.appendChild(voiceFieldset);
+
+    // Changing sex re-dresses the singer and moves the voice to the matching register.
+    sexSelect.addEventListener('change', () => {
+        castMember.sex = sexSelect.value === 'female' ? 'female' : 'male';
+        const moved = VOICE_FOR_SEX[castMember.sex][castMember.voice];
+        if (moved) {
+            castMember.voice = moved;
+            voiceInputs.forEach((input) => { input.checked = input.value === moved; });
+        }
+        refreshAvatar();
+        requestPreview(castMember);
+    });
     return card;
 }
 
@@ -138,6 +221,7 @@ export function showCastScreen(libretto, audio = null) {
             confirming = true;
             raiseCurtain.disabled = true;
             await previewTask;
+            applyRenames(libretto, cast);
             root.replaceChildren();
             resolve(libretto);
         });

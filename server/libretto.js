@@ -6,6 +6,23 @@ import { complete } from './llm.js';
 
 const VOICES = ['soprano', 'alto', 'tenor', 'baritone', 'bass'];
 const CONFIDENCES = ['high', 'low'];
+const SEXES = ['female', 'male'];
+const FEMALE_VOICES = ['soprano', 'alto'];
+
+/**
+ * Every cast member gets an explicit `sex` (drives the singer's body on stage).
+ * Fills it in from the voice register when missing (also for old cached librettos),
+ * and keeps voice and sex consistent: sex wins if the model contradicted itself.
+ */
+export function normalizeCast(l) {
+  for (const c of Array.isArray(l?.cast) ? l.cast : []) {
+    if (!SEXES.includes(c.sex)) c.sex = FEMALE_VOICES.includes(c.voice) ? 'female' : 'male';
+    const isFemaleVoice = FEMALE_VOICES.includes(c.voice);
+    if (c.sex === 'female' && !isFemaleVoice) c.voice = 'alto';
+    if (c.sex === 'male' && isFemaleVoice) c.voice = 'tenor';
+  }
+  return l;
+}
 const MOODS = ['tense', 'romantic', 'comic', 'tragic', 'triumphant'];
 const STUB_CACHE_VERSION = 'stub-lyrics-v2';
 
@@ -26,6 +43,7 @@ export function validateLibretto(l) {
     if (!str(c?.name)) errs.push(`cast[${i}].name`);
     if (!str(c?.role)) errs.push(`cast[${i}].role`);
     if (!VOICES.includes(c?.voice)) errs.push(`cast[${i}].voice must be one of ${VOICES}`);
+    if (c?.sex !== undefined && !SEXES.includes(c.sex)) errs.push(`cast[${i}].sex must be one of ${SEXES}`);
     if (!CONFIDENCES.includes(c?.voiceConfidence)) errs.push(`cast[${i}].voiceConfidence must be one of ${CONFIDENCES}`);
     if (!/^#[0-9a-fA-F]{6}$/.test(c?.color ?? '')) errs.push(`cast[${i}].color must be #rrggbb`);
   }
@@ -57,6 +75,7 @@ Requirements:
 - Lyrics must RHYME (couplets), be short enough to sing, and quote real messages from the chat where funny.
 - Use only these people, one cast entry each. ids "c1", "c2", ... in the order given.
 - "voice": one of soprano, alto, tenor, baritone, bass. Choose it using the person's name AND clues in the chat (pronouns others use for them, e.g. "he said", "tell her"). Soprano/alto for likely female, tenor/baritone/bass for likely male. If unsure, pick alto or tenor.
+- "sex": "female" or "male": the person's likely sex from their name and pronoun clues (it picks their on-stage body). It must match the voice: soprano/alto = female, tenor/baritone/bass = male.
 - "voiceConfidence": "high" if the name and/or pronoun clues clearly indicate gender, otherwise "low".
 - "color": distinct #rrggbb hex.
 - "mood" per scene: one of tense, romantic, comic, tragic, triumphant.
@@ -65,7 +84,7 @@ Requirements:
 
 Output JSON ONLY in exactly this shape:
 {"title": string,
- "cast": [{"id": "c1", "name": string, "role": string, "voice": string, "voiceConfidence": "high"|"low", "color": "#hex"}],
+ "cast": [{"id": "c1", "name": string, "role": string, "voice": string, "sex": "female"|"male", "voiceConfidence": "high"|"low", "color": "#hex"}],
  "scenes": [{"title": string, "mood": string,
    "lines": [{"cast": "c1", "lyric": string, "direction": string, "emotion": string}]}]}
 
@@ -124,10 +143,10 @@ export async function makeLibretto(chatText) {
     .digest('hex');
   const file = new URL(`${key}.json`, config.cacheDir);
   try {
-    return { libretto: JSON.parse(await readFile(file, 'utf8')), cached: true };
+    return { libretto: normalizeCast(JSON.parse(await readFile(file, 'utf8'))), cached: true };
   } catch {}
 
-  const libretto = await generate(senders, messages);
+  const libretto = normalizeCast(await generate(senders, messages));
   await mkdir(config.cacheDir, { recursive: true });
   await writeFile(file, JSON.stringify(libretto, null, 2));
   return { libretto, cached: false };

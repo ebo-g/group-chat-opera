@@ -1,12 +1,19 @@
-// Inline-SVG singers. Silhouette varies subtly with vocal register.
+// Inline-SVG singers. The BODY follows the character's sex (gown + long hair, or
+// coat + short hair); a male character's build also varies with vocal register.
 
-const PROFILES = {
-    soprano:  { shoulders: 20, hem: 38, head: 16, hair: 'long',  bodyTop: 74 },
-    alto:     { shoulders: 23, hem: 34, head: 17, hair: 'long',  bodyTop: 74 },
-    tenor:    { shoulders: 26, hem: 30, head: 18, hair: 'short', bodyTop: 72 },
-    baritone: { shoulders: 30, hem: 32, head: 19, hair: 'short', bodyTop: 70 },
-    bass:     { shoulders: 35, hem: 37, head: 21, hair: 'bald',  bodyTop: 68 },
+const FEMALE = { shoulders: 19, hem: 41, head: 16.5, bodyTop: 74 };
+const MALE = {
+    tenor:    { shoulders: 26, hem: 30, head: 18, bodyTop: 72 },
+    baritone: { shoulders: 30, hem: 32, head: 19, bodyTop: 70 },
+    bass:     { shoulders: 35, hem: 37, head: 21, bodyTop: 68 },
 };
+const FEMALE_VOICES = ['soprano', 'alto'];
+
+/** Explicit `sex` wins; otherwise infer from the voice register (soprano/alto = female). */
+export function sexOf(member) {
+    if (member && (member.sex === 'female' || member.sex === 'male')) return member.sex;
+    return FEMALE_VOICES.includes(member && member.voice) ? 'female' : 'male';
+}
 
 function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => (
@@ -26,7 +33,9 @@ function hashString(value) {
 
 export function buildCharacterSVG(member) {
     const data = member || {};
-    const p = PROFILES[data.voice] || PROFILES.tenor;
+    const sex = sexOf(data);
+    const female = sex === 'female';
+    const p = female ? FEMALE : MALE[data.voice] || MALE.tenor;
     const identity = data.id ?? data.name ?? 'singer';
     const variation = hashString(identity);
     const skin = safeColor(data.appearance?.skinColor) !== '#8888cc'
@@ -40,14 +49,29 @@ export function buildCharacterSVG(member) {
     const headY = p.bodyTop - p.head + 4;
     const gradientId = `costume-${variation}`;
 
-    const body = `M ${cx - p.shoulders} ${p.bodyTop + 8}
+    const waistY = p.bodyTop + 40;
+    const body = female
+        ? `M ${cx - p.shoulders} ${p.bodyTop + 8}
+    Q ${cx} ${p.bodyTop - 12} ${cx + p.shoulders} ${p.bodyTop + 8}
+    L ${cx + 13} ${waistY} Q ${cx + 20} ${waistY + 24} ${cx + p.hem} 178
+    L ${cx - p.hem} 178 Q ${cx - 20} ${waistY + 24} ${cx - 13} ${waistY} Z`
+        : `M ${cx - p.shoulders} ${p.bodyTop + 8}
     Q ${cx} ${p.bodyTop - 12} ${cx + p.shoulders} ${p.bodyTop + 8}
     L ${cx + p.hem} 178 L ${cx - p.hem} 178 Z`;
 
     let hairBack = '';
     let hairTop = '';
-    const hairstyle = p.hair === 'bald' && variation % 3 === 0 ? 'bald' : variation % 4;
-    if (hairstyle === 0) {
+    const hairstyle = female
+        ? variation % 4
+        : data.voice === 'bass' && variation % 3 === 0 ? 'bald' : ['crop', 'quiff', 'receding', 'crop'][variation % 4];
+    if (hairstyle === 'crop') {
+        hairTop = `<path d="M ${cx - p.head} ${headY + 1} A ${p.head} ${p.head} 0 0 1 ${cx + p.head} ${headY + 1} Q ${cx} ${headY - p.head * 0.5} ${cx - p.head} ${headY + 1} Z" fill="${hairColor}"/>`;
+    } else if (hairstyle === 'quiff') {
+        hairTop = `<path d="M ${cx - p.head} ${headY + 1} Q ${cx - p.head * 1.05} ${headY - p.head * 0.9} ${cx + p.head * 0.2} ${headY - p.head * 1.15} Q ${cx + p.head * 1.1} ${headY - p.head * 0.8} ${cx + p.head} ${headY + 1} Q ${cx} ${headY - p.head * 0.35} ${cx - p.head} ${headY + 1} Z" fill="${hairColor}"/>`;
+    } else if (hairstyle === 'receding') {
+        hairBack = `<ellipse cx="${cx - p.head * 0.93}" cy="${headY - p.head * 0.05}" rx="${p.head * 0.13}" ry="${p.head * 0.4}" fill="${hairColor}"/><ellipse cx="${cx + p.head * 0.93}" cy="${headY - p.head * 0.05}" rx="${p.head * 0.13}" ry="${p.head * 0.4}" fill="${hairColor}"/>`;
+        hairTop = `<path d="M ${cx - p.head * 0.8} ${headY - p.head * 0.55} Q ${cx} ${headY - p.head * 0.98} ${cx + p.head * 0.8} ${headY - p.head * 0.55}" fill="none" stroke="${hairColor}" stroke-width="2.2" stroke-linecap="round"/>`;
+    } else if (hairstyle === 0) {
         hairBack = `<path d="M ${cx - p.head} ${headY - 2} Q ${cx - p.head - 4} ${headY + p.head} ${cx - p.head + 2} ${headY + p.head * 2} L ${cx + p.head - 2} ${headY + p.head * 2} Q ${cx + p.head + 4} ${headY + p.head} ${cx + p.head} ${headY - 2} Z" fill="${hairColor}"/>`;
         hairTop = `<path d="M ${cx - p.head} ${headY} A ${p.head} ${p.head} 0 0 1 ${cx + p.head} ${headY} Q ${cx} ${headY - p.head * 0.85} ${cx - p.head} ${headY} Z" fill="${hairColor}"/>`;
     } else if (hairstyle === 1) {
@@ -67,12 +91,23 @@ export function buildCharacterSVG(member) {
             ? `<path d="M ${cx - 11} ${p.bodyTop + 2} L ${cx} ${p.bodyTop + 22} L ${cx + 11} ${p.bodyTop + 2}" fill="${color}" stroke="#fff0c8" stroke-width="2.5"/><circle cx="${cx}" cy="${p.bodyTop + 39}" r="2.2" fill="#f2d27b"/><circle cx="${cx}" cy="${p.bodyTop + 53}" r="2.2" fill="#f2d27b"/>`
             : `<path d="M ${cx - p.hem + 4} 174 Q ${cx} 169 ${cx + p.hem - 4} 174" fill="none" stroke="#f2d27b" stroke-width="3" opacity="0.9"/><path d="M ${cx - p.shoulders + 4} ${p.bodyTop + 9} Q ${cx} ${p.bodyTop + 20} ${cx + p.shoulders - 4} ${p.bodyTop + 9}" fill="none" stroke="#fff0c8" stroke-width="2"/>`;
 
-    return `<svg class="char-svg" viewBox="0 0 120 180" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${esc(data.name)}">
+    const facial = female
+        ? `<path d="M ${cx - p.head * 0.58} ${headY - 4.5} l -2 -1.6 M ${cx + p.head * 0.58} ${headY - 4.5} l 2 -1.6" stroke="#241711" stroke-width="1.3" stroke-linecap="round"/>
+    <circle cx="${cx - p.head - 0.5}" cy="${headY + p.head * 0.4}" r="1.9" fill="#f2d27b"/><circle cx="${cx + p.head + 0.5}" cy="${headY + p.head * 0.4}" r="1.9" fill="#f2d27b"/>`
+        : (data.voice === 'bass' || data.voice === 'baritone' || variation % 2 === 0)
+            ? `<path d="M ${cx - p.head * 0.5} ${headY + p.head * 0.3} Q ${cx} ${headY + p.head * 0.12} ${cx + p.head * 0.5} ${headY + p.head * 0.3} Q ${cx} ${headY + p.head * 0.42} ${cx - p.head * 0.5} ${headY + p.head * 0.3} Z" fill="${hairColor}"/>`
+            : '';
+    const neckwear = female
+        ? `<path d="M ${cx - 9} ${p.bodyTop + 6} Q ${cx} ${p.bodyTop + 18} ${cx + 9} ${p.bodyTop + 6}" fill="none" stroke="#f2d27b" stroke-width="1.6"/><circle cx="${cx}" cy="${p.bodyTop + 15}" r="2" fill="#fff0c8"/>`
+        : `<path d="M ${cx - 8} ${p.bodyTop + 4} L ${cx} ${p.bodyTop + 9} L ${cx - 8} ${p.bodyTop + 14} Z M ${cx + 8} ${p.bodyTop + 4} L ${cx} ${p.bodyTop + 9} L ${cx + 8} ${p.bodyTop + 14} Z" fill="#f5e9c8"/><circle cx="${cx}" cy="${p.bodyTop + 9}" r="2.2" fill="#a01830"/>`;
+
+    return `<svg class="char-svg sex-${sex}" viewBox="0 0 120 180" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${esc(data.name)}">
     <defs><linearGradient id="${gradientId}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${color}"/><stop offset="1" stop-color="#20152a"/></linearGradient></defs>
     ${hairBack}
     <path d="${body}" fill="url(#${gradientId})" stroke="#d4af37" stroke-width="2"/>
     <path d="M ${cx - 10} ${p.bodyTop + 2} L ${cx} ${p.bodyTop + 22} L ${cx + 10} ${p.bodyTop + 2}" fill="none" stroke="#f5e9c8" stroke-width="3"/>
     ${costumeDetail}
+    ${neckwear}
     <circle cx="${cx}" cy="${headY}" r="${p.head}" fill="${skin}" stroke="#8a6a4a" stroke-width="1.5"/>
     <ellipse cx="${cx - p.head * 0.58}" cy="${headY + p.head * 0.45}" rx="2.4" ry="1.3" fill="#d78678" opacity="0.45"/>
     <ellipse cx="${cx + p.head * 0.58}" cy="${headY + p.head * 0.45}" rx="2.4" ry="1.3" fill="#d78678" opacity="0.45"/>
@@ -81,6 +116,7 @@ export function buildCharacterSVG(member) {
     <path d="M ${cx + p.head * 0.2} ${headY - 5} Q ${cx + p.head * 0.4} ${headY - 7} ${cx + p.head * 0.64} ${headY - 5}" fill="none" stroke="${hairColor}" stroke-width="1.6" stroke-linecap="round"/>
     <ellipse cx="${cx - p.head * 0.38}" cy="${headY - 1}" rx="3" ry="3.5" fill="#fff5e8"/><ellipse cx="${cx + p.head * 0.38}" cy="${headY - 1}" rx="3" ry="3.5" fill="#fff5e8"/>
     <circle cx="${cx - p.head * 0.34}" cy="${headY - 1}" r="1.7" fill="#28202a"/><circle cx="${cx + p.head * 0.34}" cy="${headY - 1}" r="1.7" fill="#28202a"/>
+    ${facial}
     <ellipse class="mouth" cx="${cx}" cy="${headY + p.head * 0.45}" rx="${p.head * 0.3}" ry="2" fill="#73172b" stroke="#4b1020" stroke-width="0.8"/>
   </svg>`;
 }
@@ -91,7 +127,7 @@ export function renderCastRow(rowEl, cast) {
     (cast || []).forEach((member) => {
         const singerData = member || {};
         const singer = document.createElement('div');
-        singer.className = 'singer voice-' + esc(singerData.voice);
+        singer.className = 'singer voice-' + esc(singerData.voice) + ' sex-' + sexOf(singerData);
         singer.dataset.castId = String(singerData.id == null ? '' : singerData.id);
         singer.setAttribute('role', 'listitem');
         singer.style.setProperty('--accent', safeColor(singerData.color));

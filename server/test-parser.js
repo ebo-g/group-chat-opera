@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseChat, selectDramatic } from './parser.js';
-import { validateLibretto } from './libretto.js';
+import { validateLibretto, normalizeCast } from './libretto.js';
 
 const sample = readFileSync(new URL('./sample-chat.txt', import.meta.url), 'utf8');
 const msgs = parseChat(sample);
@@ -46,5 +46,10 @@ assert.ok(sel.messages.every((m) => m.text !== 'ok'), 'dramatic stretch chosen')
 // Validator
 assert.deepEqual(validateLibretto(JSON.parse(readFileSync(new URL('./mock-libretto.json', import.meta.url)))), []);
 assert.ok(validateLibretto({}).length > 0);
+
+// sex normalisation: derived from voice when missing; sex wins on contradiction
+const nc = normalizeCast({ cast: [{ voice: 'soprano' }, { voice: 'bass' }, { voice: 'tenor', sex: 'female' }, { voice: 'alto', sex: 'male' }, { voice: 'bass', sex: 'male' }] }).cast;
+assert.deepEqual(nc.map((c) => [c.sex, c.voice]), [['female', 'soprano'], ['male', 'bass'], ['female', 'alto'], ['male', 'tenor'], ['male', 'bass']]);
+assert.ok(validateLibretto({ ...JSON.parse(readFileSync(new URL('./mock-libretto.json', import.meta.url))), cast: [{ id: 'c1', name: 'A', role: 'r', voice: 'bass', color: '#aabbcc', sex: 'robot', voiceConfidence: 'low' }] }).some((e) => /sex/.test(e)));
 
 console.log('all parser tests passed');
