@@ -1,0 +1,345 @@
+/* ============================================================
+   GROUP CHAT: THE OPERA — STAGE STYLES
+   Owned by Ali. Only touch /web/src/stage and /web/src/main.js.
+   ============================================================ */
+
+:root {
+    --stage-bg-top: #0a0410;
+    --stage-bg-bottom: #1a0a1f;
+    --velvet-red: #6e0f1a;
+    --velvet-red-dark: #3c060d;
+    --velvet-shine: #a81c2b;
+    --gold: #d4af37;
+    --spotlight-color: rgba(255, 244, 200, 0.55);
+    --surtitle-bg: rgba(0, 0, 0, 0.75);
+}
+
+.hidden { display: none !important; }
+
+.opera-root {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+    background: radial-gradient(ellipse at center, var(--stage-bg-bottom) 0%, var(--stage-bg-top) 100%);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    color: #f5e9d8;
+}
+
+/* ---------------- STAGE FLOOR ---------------- */
+.stage-floor {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 38%;
+    background: linear-gradient(to bottom, #241018 0%, #120810 100%);
+    border-top: 2px solid rgba(212, 175, 55, 0.25);
+}
+
+.stage-floor::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+            100deg,
+            rgba(0,0,0,0.15) 0px,
+            rgba(0,0,0,0.15) 2px,
+            transparent 2px,
+            transparent 40px
+    );
+    opacity: 0.4;
+}
+
+/* ---------------- VELVET CURTAINS ---------------- */
+.curtain-wrap {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+    display: flex;
+}
+
+.curtain {
+    flex: 1;
+    height: 100%;
+    background: repeating-linear-gradient(
+            90deg,
+            var(--velvet-red) 0%,
+            var(--velvet-shine) 4%,
+            var(--velvet-red) 8%,
+            var(--velvet-red-dark) 12%
+    );
+    box-shadow: inset 0 0 80px rgba(0,0,0,0.6);
+    transition: transform 2.2s cubic-bezier(0.65, 0, 0.35, 1);
+    position: relative;
+}
+
+.curtain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent 15%, transparent 85%, rgba(0,0,0,0.6));
+}
+
+.curtain-left { transform: translateX(0); border-right: 3px solid var(--gold); }
+.curtain-right { transform: translateX(0); border-left: 3px solid var(--gold); }
+
+.curtain-wrap.open .curtain-left { transform: translateX(-102%); }
+.curtain-wrap.open .curtain-right { transform: translateX(102%); }
+
+.curtain-valance {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 8%;
+    background: linear-gradient(to bottom, var(--velvet-shine), var(--velvet-red-dark));
+    border-bottom: 4px solid var(--gold);
+    z-index: 60;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+}
+
+/* ---------------- SPOTLIGHT ---------------- */
+.spotlight {
+    position: absolute;
+    top: -10%;
+    width: 26vw;
+    height: 140%;
+    background: radial-gradient(ellipse at top, var(--spotlight-color) 0%, rgba(255,244,200,0.12) 40%, transparent 70%);
+    transform-origin: top center;
+    transition: left 0.6s ease, opacity 0.4s ease;
+    opacity: 0;
+    z-index: 20;
+    pointer-events: none;
+    mix-blend-mode: screen;
+}
+
+.spotlight.active { opacity: 1; }
+
+/* ---------------- CAST / CHARACTERS ---------------- */
+.cast-row {
+    position: absolute;
+    bottom: 6%;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 3vw;
+    z-index: 10;
+}
+
+.character {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    opacity: 0.45;
+    transform: translateY(10px) scale(0.94);
+    transition: opacity 0.5s ease, transform 0.5s ease, filter 0.5s ease;
+    filter: brightness(0.6) saturate(0.7);
+}
+
+.character.singing {
+    opacity: 1;
+    transform: translateY(0) scale(1.06);
+    filter: brightness(1.15) saturate(1.1);
+}
+
+.character.bowing {
+    animation: bow 1.4s ease-in-out;
+}
+
+@keyframes bow {
+    0%, 100% { transform: rotate(0deg) translateY(0); }
+    50% { transform: rotate(18deg) translateY(10px); }
+}
+
+.character svg { width: 9vw; max-width: 120px; min-width: 70px; display: block; }
+
+.character .mouth {
+    transform-origin: center;
+    transition: transform 0.08s ease;
+}
+
+.character.singing .mouth {
+    animation: sing-mouth 0.38s ease-in-out infinite;
+}
+
+@keyframes sing-mouth {
+    0%, 100% { transform: scaleY(0.4); }
+    50% { transform: scaleY(1.3); }
+}
+
+.nameplate {
+    margin-top: 0.4em;
+    padding: 0.15em 0.8em;
+    border: 1px solid var(--gold);
+    border-radius: 4px;
+    background: rgba(0,0,0,0.5);
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--gold);
+    white-space: nowrap;
+}
+
+/* ---------------- SURTITLES ---------------- */
+.surtitles {
+    position: absolute;
+    top: 6%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(80%, 900px);
+    background: var(--surtitle-bg);
+    border: 1px solid var(--gold);
+    border-radius: 8px;
+    padding: 0.9em 1.4em;
+    text-align: center;
+    z-index: 40;
+    opacity: 0;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.surtitles.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.surtitles .speaker-name {
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 0.3em;
+    display: block;
+}
+
+.surtitles .lyric-line {
+    font-size: 1.3rem;
+    line-height: 1.4;
+    margin: 0;
+}
+
+.surtitles .stage-direction {
+    display: block;
+    margin-top: 0.5em;
+    font-style: italic;
+    font-size: 0.95rem;
+    color: #cbb6e0;
+}
+
+.surtitles .emotion-tag {
+    display: block;
+    margin-top: 0.6em;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #8a8a8a;
+}
+
+.nameplate .role {
+    font-weight: normal;
+    opacity: 0.7;
+    font-size: 0.8em;
+}
+
+/* ---------------- TITLE CARDS ---------------- */
+.title-card {
+    position: absolute;
+    inset: 0;
+    z-index: 70;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(5, 2, 8, 0.92);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.9s ease;
+    text-align: center;
+    padding: 2rem;
+}
+
+.title-card.visible { opacity: 1; }
+
+.title-card h1 {
+    font-size: clamp(1.6rem, 5vw, 3rem);
+    color: var(--gold);
+    letter-spacing: 0.08em;
+    margin-bottom: 0.3em;
+    text-shadow: 0 0 25px rgba(212,175,55,0.5);
+}
+
+.title-card .mood-tag {
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #cbb6e0;
+}
+
+/* ---------------- MOOD LIGHTING ---------------- */
+.opera-root.mood-dramatic .spotlight { --spotlight-color: rgba(255, 90, 90, 0.5); }
+.opera-root.mood-comic .spotlight { --spotlight-color: rgba(255, 244, 150, 0.6); }
+.opera-root.mood-triumphant .spotlight { --spotlight-color: rgba(255, 215, 120, 0.7); }
+.opera-root.mood-triumphant { background: radial-gradient(ellipse at center, #3a1a08 0%, #150704 100%); }
+
+/* ---------------- CURTAIN CALL ---------------- */
+.curtain-call {
+    position: absolute;
+    inset: 0;
+    z-index: 80;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    padding-bottom: 8%;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 1s ease;
+}
+
+.curtain-call.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.curtain-call .bow-row {
+    display: flex;
+    gap: 2vw;
+    margin-bottom: 2rem;
+}
+
+.bravo-btn {
+    font-family: inherit;
+    font-size: 1.2rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.7em 2em;
+    background: linear-gradient(135deg, var(--gold), #a9802f);
+    border: none;
+    border-radius: 30px;
+    color: #241018;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(212,175,55,0.4);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bravo-btn:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 10px 28px rgba(212,175,55,0.55); }
+.bravo-btn:active { transform: translateY(0) scale(0.98); }
+
+/* ---------------- ROSES ---------------- */
+.rose {
+    position: absolute;
+    top: -5%;
+    font-size: 1.8rem;
+    z-index: 90;
+    pointer-events: none;
+    animation: rose-fall linear forwards;
+}
+
+@keyframes rose-fall {
+    0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(110vh) rotate(540deg); opacity: 0.9; }
+}
