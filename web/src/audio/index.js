@@ -47,6 +47,7 @@ let bass;
 let voiceBus;
 const voiceSynths = new Map();
 const castTimbres = new Map();
+const castTimbrePools = new Map();
 let toneVolume;
 let toneMusic;
 let repeatId;
@@ -65,6 +66,7 @@ let lineNumbers = new WeakMap();
 let lineAudio = new WeakMap();
 let audioUrls = new Set();
 let speechVoiceCatalog = [];
+let speechVoiceLoadPromise;
 let nextLineNumber = 0;
 
 export function setSingingMode(mode) {
@@ -285,13 +287,16 @@ function voicePool(voiceType) {
 
 function timbreFor(castMember) {
   const key = castKey(castMember);
-  if (!castTimbres.has(key)) {
-    const pool = voicePool(castMember?.voice);
+  const pool = voicePool(castMember?.voice);
+  if (castTimbrePools.get(key) !== pool) {
+    const previousPool = castTimbrePools.get(key);
+    if (previousPool) castTimbres.delete(`${previousPool}:${key}`);
     const count = [...castTimbres.keys()].filter((entry) => entry.startsWith(`${pool}:`)).length;
     const waves = pool === 'female' ? ['sine', 'triangle'] : ['sawtooth', 'square', 'triangle'];
     const wave = waves[count % waves.length];
     castTimbres.set(key, wave);
     castTimbres.set(`${pool}:${key}`, wave);
+    castTimbrePools.set(key, pool);
   }
   return castTimbres.get(key);
 }
@@ -421,10 +426,22 @@ function waitForSpeechVoices() {
   });
 }
 
+function loadSpeechVoiceCatalog() {
+  if (!speechVoiceLoadPromise) {
+    speechVoiceLoadPromise = waitForSpeechVoices().then((voices) => {
+      speechVoiceCatalog = voices;
+      return voices;
+    });
+  }
+  return speechVoiceLoadPromise;
+}
+
 function getSpeechAssignment(castMember) {
   const key = castKey(castMember);
-  if (castVoiceMap.has(key)) return castVoiceMap.get(key);
   const pool = voicePool(castMember?.voice);
+  const existing = castVoiceMap.get(key);
+  if (existing?.pool === pool) return existing;
+  if (existing) castVoiceMap.delete(key);
   const english = speechVoiceCatalog.filter((voice) => /^en[-_]/i.test(voice.lang || ''));
   const sorted = [...(english.length ? english : speechVoiceCatalog)].sort((a, b) => speechVoiceRank(a) - speechVoiceRank(b) || a.name.localeCompare(b.name));
   const matching = sorted.filter((voice) => classifySpeechVoice(voice) === pool);
@@ -437,20 +454,21 @@ function getSpeechAssignment(castMember) {
   return assignment;
 }
 
-function speakLine(line, castMember) {
+async function speakLine(line, castMember) {
   const text = typeof line === 'string' ? line : line?.lyric || '';
   if (!text.trim()) return Promise.resolve();
   if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
     const duration = Math.max(650, Math.min(6000, text.trim().split(/\s+/).length * 300));
     return new Promise((resolve) => window.setTimeout(resolve, duration));
   }
+  if (!speechVoiceCatalog.length) await loadSpeechVoiceCatalog();
+  const assignment = getSpeechAssignment(castMember);
   return new Promise((resolve) => {
     const utterance = new SpeechSynthesisUtterance(text);
     const profile = VOICE[castMember?.voice] || VOICE.alto;
     utterance.pitch = profile.pitch;
     utterance.rate = profile.rate;
     utterance.volume = 1;
-    const assignment = getSpeechAssignment(castMember);
     utterance.voice = assignment.voice;
     if (utterance.voice?.lang) utterance.lang = utterance.voice.lang;
     let done = false;
@@ -485,13 +503,20 @@ function releasePreparedAudio() {
 /** Freeze cast voices and preload spoken lines before the overture begins. */
 export async function prepareOpera(libretto) {
   releasePreparedAudio();
+  for (const performer of voiceSynths.values()) {
+    performer.synth.dispose();
+    performer.filter.dispose();
+  }
+  voiceSynths.clear();
+  castTimbres.clear();
+  castTimbrePools.clear();
   castVoiceMap = new Map();
   castEngineMap = new Map();
   const cast = Array.isArray(libretto?.cast) ? libretto.cast : [];
   const lines = (Array.isArray(libretto?.scenes) ? libretto.scenes : []).flatMap((scene) => scene.lines || []);
   lines.forEach((line, index) => { if (line && typeof line === 'object') lineNumbers.set(line, index + 1); });
 
-  speechVoiceCatalog = await waitForSpeechVoices();
+  speechVoiceCatalog = await loadSpeechVoiceCatalog();
   castVoiceMap = assignCastVoices(cast, speechVoiceCatalog);
   for (const member of cast) castEngineMap.set(castKey(member), 'synth');
   if (singingMode !== 'speech') return; // Do not spend ElevenLabs credits in sung mode.

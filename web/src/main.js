@@ -58,6 +58,7 @@ export async function runOpera(libretto) {
         operaRoot.removeAttribute('aria-hidden');
 
         const performance = await showCastScreen(libretto, audio);
+        await audio.prepareOpera(performance);
         await audio.primeAudio();
         initStage(operaRoot, performance.cast);
         await Promise.all([openCurtains(), performanceAudio.overture()]);
