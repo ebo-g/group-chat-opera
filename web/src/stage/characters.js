@@ -97,6 +97,15 @@ export function buildCharacterSVG(member) {
         : (data.voice === 'bass' || data.voice === 'baritone' || variation % 2 === 0)
             ? `<path d="M ${cx - p.head * 0.5} ${headY + p.head * 0.3} Q ${cx} ${headY + p.head * 0.12} ${cx + p.head * 0.5} ${headY + p.head * 0.3} Q ${cx} ${headY + p.head * 0.42} ${cx - p.head * 0.5} ${headY + p.head * 0.3} Z" fill="${hairColor}"/>`
             : '';
+    // Rap gear: gold chain with a pendant, plus a cap and/or shades picked per character.
+    const chain = `<path d="M ${cx - 15} ${p.bodyTop + 3} Q ${cx} ${p.bodyTop + 30} ${cx + 15} ${p.bodyTop + 3}" fill="none" stroke="#ffd700" stroke-width="2.6" stroke-dasharray="4 1.6"/><circle cx="${cx}" cy="${p.bodyTop + 24}" r="4.2" fill="#ffd700" stroke="#a87c00" stroke-width="1"/>`;
+    const capOn = variation % 3 !== 0;
+    const shadesOn = variation % 2 === 0 || !capOn;
+    const rapGear = `${capOn
+        ? `<path d="M ${cx - p.head * 1.06} ${headY - p.head * 0.12} Q ${cx} ${headY - p.head * 1.55} ${cx + p.head * 1.06} ${headY - p.head * 0.12} Z" fill="${color}" stroke="#10040f" stroke-width="1.4"/><path d="M ${cx - p.head * 0.1} ${headY - p.head * 0.2} L ${cx + p.head * 1.55} ${headY - p.head * 0.1}" stroke="#10040f" stroke-width="3.2" stroke-linecap="round"/>`
+        : ''}${shadesOn
+        ? `<rect x="${cx - p.head * 0.78}" y="${headY - p.head * 0.24}" width="${p.head * 0.64}" height="${p.head * 0.36}" rx="3" fill="#0a0a0a"/><rect x="${cx + p.head * 0.14}" y="${headY - p.head * 0.24}" width="${p.head * 0.64}" height="${p.head * 0.36}" rx="3" fill="#0a0a0a"/><path d="M ${cx - p.head * 0.14} ${headY - p.head * 0.12} L ${cx + p.head * 0.14} ${headY - p.head * 0.12}" stroke="#0a0a0a" stroke-width="2"/>`
+        : ''}`;
     const neckwear = female
         ? `<path d="M ${cx - 9} ${p.bodyTop + 6} Q ${cx} ${p.bodyTop + 18} ${cx + 9} ${p.bodyTop + 6}" fill="none" stroke="#f2d27b" stroke-width="1.6"/><circle cx="${cx}" cy="${p.bodyTop + 15}" r="2" fill="#fff0c8"/>`
         : `<path d="M ${cx - 8} ${p.bodyTop + 4} L ${cx} ${p.bodyTop + 9} L ${cx - 8} ${p.bodyTop + 14} Z M ${cx + 8} ${p.bodyTop + 4} L ${cx} ${p.bodyTop + 9} L ${cx + 8} ${p.bodyTop + 14} Z" fill="#f5e9c8"/><circle cx="${cx}" cy="${p.bodyTop + 9}" r="2.2" fill="#a01830"/>`;
@@ -107,7 +116,7 @@ export function buildCharacterSVG(member) {
     <path d="${body}" fill="url(#${gradientId})" stroke="#d4af37" stroke-width="2"/>
     <path d="M ${cx - 10} ${p.bodyTop + 2} L ${cx} ${p.bodyTop + 22} L ${cx + 10} ${p.bodyTop + 2}" fill="none" stroke="#f5e9c8" stroke-width="3"/>
     ${costumeDetail}
-    ${neckwear}
+    ${chain}
     <circle cx="${cx}" cy="${headY}" r="${p.head}" fill="${skin}" stroke="#8a6a4a" stroke-width="1.5"/>
     <ellipse cx="${cx - p.head * 0.58}" cy="${headY + p.head * 0.45}" rx="2.4" ry="1.3" fill="#d78678" opacity="0.45"/>
     <ellipse cx="${cx + p.head * 0.58}" cy="${headY + p.head * 0.45}" rx="2.4" ry="1.3" fill="#d78678" opacity="0.45"/>
@@ -116,6 +125,7 @@ export function buildCharacterSVG(member) {
     <path d="M ${cx + p.head * 0.2} ${headY - 5} Q ${cx + p.head * 0.4} ${headY - 7} ${cx + p.head * 0.64} ${headY - 5}" fill="none" stroke="${hairColor}" stroke-width="1.6" stroke-linecap="round"/>
     <ellipse cx="${cx - p.head * 0.38}" cy="${headY - 1}" rx="3" ry="3.5" fill="#fff5e8"/><ellipse cx="${cx + p.head * 0.38}" cy="${headY - 1}" rx="3" ry="3.5" fill="#fff5e8"/>
     <circle cx="${cx - p.head * 0.34}" cy="${headY - 1}" r="1.7" fill="#28202a"/><circle cx="${cx + p.head * 0.34}" cy="${headY - 1}" r="1.7" fill="#28202a"/>
+    ${rapGear}
     ${facial}
     <ellipse class="mouth" cx="${cx}" cy="${headY + p.head * 0.45}" rx="${p.head * 0.3}" ry="2" fill="#73172b" stroke="#4b1020" stroke-width="0.8"/>
   </svg>`;
