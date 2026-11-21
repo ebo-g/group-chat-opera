@@ -468,13 +468,26 @@ export function rapLyric(speech, sampleRate, text, member, { stepSeconds, steps 
     slots.push(slot);
   });
 
+  // Pull each vowel only PART of the way to its grid step, so the speech keeps its natural flow and
+  // the line still grooves; snapping fully leaves dead air between syllables and sounds choppy.
+  const SNAP = 0.8;
+  const times = nuclei.map((_, j) => {
+    const natural = (lead + ((peakT[j] - peakT[0]) * scale) / stepSeconds) * stepSeconds;
+    return natural + SNAP * (slots[j] * stepSeconds - natural);
+  });
+  for (let j = 1; j < times.length; j++) times[j] = Math.max(times[j], times[j - 1] + 0.07);
+  const onsets = nuclei.map((nu) => Math.max(0, (frameSample(nu.coreFrom) - frameSample(nu.from)) / sr));
   const notes = nuclei.map((nu, j) => {
-    const onset = Math.max(0, (frameSample(nu.coreFrom) - frameSample(nu.from)) / sr);
+    const onset = onsets[j];
     const total = Math.max(0.08, (frameSample(nu.to) - frameSample(nu.from)) / sr);
+    // room until the NEXT segment starts (its consonant onset begins before its vowel)
+    const room = j + 1 < times.length ? times[j + 1] - onsets[j + 1] - (times[j] - onset) : total;
+    // stretch the vowel into most of that room (no holes), but never into a drawl or an overlap
+    const dur = Math.min(total * 2.2, Math.max(total, total + 0.8 * (room - total)), Math.max(total, room));
     return {
       midi: 69 + 12 * Math.log2(coreF0(nu) / 440),
-      start: Math.max(0, slots[j] * stepSeconds - onset), // the vowel, not the consonant, sits on the grid
-      dur: total, // natural length: no held vowels in rap
+      start: Math.max(0, times[j] - onset), // the vowel, not the consonant, sits near the grid
+      dur,
     };
   });
   const profile = singerProfile(member);

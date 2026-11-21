@@ -101,13 +101,13 @@ export function startBeat(ctx, mood) {
   const mine = state;
   timer = setInterval(() => {
     if (state !== mine) return;
-    while (next < ctx.currentTime + 0.25) {
+    while (next < ctx.currentTime + 0.7) { // long lookahead: the beat must never stall while lines render
       schedule(ctx, out, step, next, stepSeconds, bar);
       next += stepSeconds;
       step = (step + 1) % 16;
       if (step === 0) bar += 1;
     }
-  }, 50);
+  }, 30);
 }
 
 /** Lower the beat while someone is rapping. */
