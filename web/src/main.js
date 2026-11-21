@@ -27,11 +27,19 @@ const audioMod = Object.values(audioMods)[0] || {};
 const landingMod = Object.values(landingMods)[0] || {};
 
 const noop = () => Promise.resolve();
+// Audio must never stall the show (e.g. Tone.js fails to load from esm.sh, or
+// speech never fires `end`): race every audio call against a timeout and
+// swallow its errors so the visuals always continue.
+const guarded = (fn, ms) => (...args) =>
+    Promise.race([
+        Promise.resolve().then(() => fn(...args)).catch((err) => console.warn('audio error:', err)),
+        new Promise((resolve) => setTimeout(resolve, ms)),
+    ]);
 const audio = {
-    sing: audioMod.sing || noop,
-    orchestra: audioMod.orchestra || noop,
-    overture: audioMod.overture || noop,
-    finale: audioMod.finale || noop,
+    sing: guarded(audioMod.sing || noop, 35000),
+    orchestra: guarded(audioMod.orchestra || noop, 8000),
+    overture: guarded(audioMod.overture || noop, 8000),
+    finale: guarded(audioMod.finale || noop, 8000),
 };
 
 let running = false;
