@@ -28,6 +28,7 @@ body { margin:0; background:var(--opera-bg); color:var(--opera-cream); font-fami
 .opera-voice-toggle { display:block; width:100%; margin-top:10px; padding:10px 12px; border:1px solid #554736; background:#1b1713; color:#bcb3a5; font:11px 'DM Mono',monospace; cursor:pointer; }
 .opera-voice-toggle:hover,.opera-voice-toggle[aria-pressed="true"] { border-color:var(--opera-gold); color:var(--opera-gold); }
 .opera-voice-toggle span { color:var(--opera-gold); }
+.opera-voice-note { margin:7px 2px 0; color:#8f887e; font-size:10px; line-height:1.45; }
 .opera-primary span,.opera-sample span { font-size:18px; }
 .opera-divider { display:flex; align-items:center; gap:12px; color:#80786d; font:10px 'DM Mono',monospace; margin:12px 0; }
 .opera-divider::before,.opera-divider::after { content:''; height:1px; flex:1; background:#342e27; }

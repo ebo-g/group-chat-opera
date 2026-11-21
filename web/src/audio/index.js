@@ -273,8 +273,8 @@ export async function finale() {
 }
 
 function duckMusic(isDucked) {
-  if (toneVolume && tone?.now) toneVolume.volume.rampTo(isDucked ? -32 : -18, 0.18);
-  if (fallbackBus && audioContext) fallbackBus.gain.setTargetAtTime(isDucked ? 0.055 : fallbackLevel, audioContext.currentTime, 0.18);
+  if (toneVolume && tone?.now) toneVolume.volume.rampTo(isDucked ? -23 : -18, 0.18);
+  if (fallbackBus && audioContext) fallbackBus.gain.setTargetAtTime(isDucked ? fallbackLevel * 0.55 : fallbackLevel, audioContext.currentTime, 0.18);
 }
 
 function castKey(castMember) {
@@ -301,6 +301,19 @@ function timbreFor(castMember) {
   return castTimbres.get(key);
 }
 
+function normalizeLyricText(line) {
+  const text = typeof line === 'string' ? line : line?.lyric || '';
+  const lyric = text
+    .replace(/\s*\/(?:\s*\/)*\s*/g, ', ')
+    .replace(/(?:,\s*){2,}/g, ', ')
+    .replace(/\s+([,;:.!?])/g, '$1')
+    .replace(/([,;:])\s*[.!?]/g, '$1')
+    .replace(/^[\s,;:.!?—–-]+|[\s,;:—–-]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return /[\p{L}\p{N}]/u.test(lyric) ? lyric : '';
+}
+
 function syllablesOf(text) {
   const syllables = [];
   for (const word of text.toLowerCase().match(/[a-z]+/g) || []) {
@@ -325,9 +338,12 @@ function vowelSynth(castMember) {
 }
 
 function singSynth(line, castMember) {
-  const text = typeof line === 'string' ? line : line?.lyric || '';
+  const text = normalizeLyricText(line);
+  if (!text) return Promise.resolve();
+  if ('speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
+    return speakLine(text, castMember, { melodic: true });
+  }
   const notes = syllablesOf(text);
-  if (!notes.length) return Promise.resolve();
   const profile = VOICE[castMember?.voice] || VOICE.alto;
   const mood = MELODIES[activeMood] || MELODIES.comic;
   const step = 0.22;
@@ -383,7 +399,7 @@ function classifySpeechVoice(voice) {
 
 function speechVoiceRank(voice) {
   if (/natural/i.test(voice.name)) return 0;
-  if (/google/i.test(voice.name)) return 1;
+  if (/google|premium/i.test(voice.name)) return 1;
   return 2;
 }
 
@@ -397,8 +413,10 @@ function assignCastVoices(cast, voices) {
     const matching = sorted.filter((voice) => classifySpeechVoice(voice) === pool);
     const unknown = sorted.filter((voice) => classifySpeechVoice(voice) === 'unknown');
     const choices = matching.length ? [...matching, ...unknown] : unknown.length ? unknown : sorted;
-    const voice = choices.find((candidate) => !used[pool].has(candidate))
-      || choices[map.size % Math.max(1, choices.length)] || null;
+    const preferred = choices.filter((candidate) => speechVoiceRank(candidate) < 2);
+    const candidates = preferred.length ? preferred : choices;
+    const voice = candidates.find((candidate) => !used[pool].has(candidate))
+      || candidates[map.size % Math.max(1, candidates.length)] || null;
     if (voice) used[pool].add(voice);
     map.set(castKey(member), { voice, pool, label: voice?.name || `${pool} system voice` });
   }
@@ -436,7 +454,15 @@ function loadSpeechVoiceCatalog() {
   return speechVoiceLoadPromise;
 }
 
+function refreshSpeechVoiceCatalog() {
+  const voices = window.speechSynthesis.getVoices();
+  const signature = (items) => items.map((voice) => `${voice.name}\u0000${voice.lang}`).join('\u0001');
+  if (signature(voices) !== signature(speechVoiceCatalog)) castVoiceMap = new Map();
+  speechVoiceCatalog = voices;
+}
+
 function getSpeechAssignment(castMember) {
+  refreshSpeechVoiceCatalog();
   const key = castKey(castMember);
   const pool = voicePool(castMember?.voice);
   const existing = castVoiceMap.get(key);
@@ -447,49 +473,78 @@ function getSpeechAssignment(castMember) {
   const matching = sorted.filter((voice) => classifySpeechVoice(voice) === pool);
   const unknown = sorted.filter((voice) => classifySpeechVoice(voice) === 'unknown');
   const choices = matching.length ? [...matching, ...unknown] : unknown.length ? unknown : sorted;
+  const preferred = choices.filter((candidate) => speechVoiceRank(candidate) < 2);
+  const candidates = preferred.length ? preferred : choices;
   const used = new Set([...castVoiceMap.values()].map((assignment) => assignment.voice).filter(Boolean));
-  const voice = choices.find((candidate) => !used.has(candidate)) || choices[0] || null;
+  const voice = candidates.find((candidate) => !used.has(candidate)) || candidates[0] || null;
   const assignment = { voice, pool, label: voice?.name || `${pool} system voice` };
   castVoiceMap.set(key, assignment);
   return assignment;
 }
 
-async function speakLine(line, castMember) {
-  const text = typeof line === 'string' ? line : line?.lyric || '';
-  if (!text.trim()) return Promise.resolve();
-  if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
-    const duration = Math.max(650, Math.min(6000, text.trim().split(/\s+/).length * 300));
-    return new Promise((resolve) => window.setTimeout(resolve, duration));
+function melodicPhrases(text) {
+  const words = text.match(/\S+/gu) || [];
+  const phrases = [];
+  for (let index = 0; index < words.length; index += 3) {
+    phrases.push(words.slice(index, index + 3).join(' '));
   }
-  if (!speechVoiceCatalog.length) await loadSpeechVoiceCatalog();
-  const assignment = getSpeechAssignment(castMember);
-  return new Promise((resolve) => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    const profile = VOICE[castMember?.voice] || VOICE.alto;
+  return phrases;
+}
+
+function speakUtterance(text, assignment, profile, { melodic, phraseIndex = 0 } = {}) {
+  const utterance = new SpeechSynthesisUtterance(text);
+  if (melodic) {
+    const contour = MELODIES[activeMood] || MELODIES.comic;
+    const semitones = contour[phraseIndex % contour.length];
+    utterance.pitch = Math.max(0.72, Math.min(1.4, profile.pitch * 2 ** (semitones / 12)));
+    utterance.rate = Math.min(0.84, profile.rate);
+  } else {
     utterance.pitch = profile.pitch;
     utterance.rate = profile.rate;
-    utterance.volume = 1;
-    utterance.voice = assignment.voice;
-    if (utterance.voice?.lang) utterance.lang = utterance.voice.lang;
+  }
+  utterance.volume = 1;
+  utterance.voice = assignment.voice;
+  if (utterance.voice?.lang) utterance.lang = utterance.voice.lang;
+  return new Promise((resolve) => {
     let done = false;
     let timer;
     const finish = () => {
       if (done) return;
       done = true;
       window.clearTimeout(timer);
-      duckMusic(false);
       resolve();
     };
-    utterance.onstart = () => duckMusic(true);
     utterance.onend = finish;
     utterance.onerror = finish;
-    const estimate = Math.max(4500, Math.min(35000, text.trim().split(/\s+/).length * 430));
+    const estimate = Math.max(4500, Math.min(12000, text.trim().split(/\s+/).length * 900));
     timer = window.setTimeout(() => {
       window.speechSynthesis.cancel();
       finish();
     }, estimate);
     try { window.speechSynthesis.speak(utterance); } catch { finish(); }
   });
+}
+
+async function speakLine(line, castMember, { melodic = false } = {}) {
+  const text = normalizeLyricText(line);
+  if (!text) return;
+  if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+    const duration = Math.max(650, Math.min(6000, text.split(/\s+/).length * 300));
+    return new Promise((resolve) => window.setTimeout(resolve, duration));
+  }
+  refreshSpeechVoiceCatalog();
+  if (!speechVoiceCatalog.length) speechVoiceLoadPromise = undefined;
+  const assignment = getSpeechAssignment(castMember);
+  const profile = VOICE[castMember?.voice] || VOICE.alto;
+  const phrases = melodic ? melodicPhrases(text) : [text];
+  duckMusic(true);
+  try {
+    for (let index = 0; index < phrases.length; index += 1) {
+      await speakUtterance(phrases[index], assignment, profile, { melodic, phraseIndex: index });
+    }
+  } finally {
+    duckMusic(false);
+  }
 }
 
 function releasePreparedAudio() {
@@ -540,7 +595,7 @@ export async function prepareOpera(libretto) {
         const response = await fetch('/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: line.lyric || '', castId: id, voice: member.voice }),
+          body: JSON.stringify({ text: normalizeLyricText(line), castId: id, voice: member.voice }),
         });
         if (!response.ok) throw new Error(`TTS endpoint returned ${response.status}`);
         if (!(response.headers.get('content-type') || '').toLowerCase().startsWith('audio/')) {
@@ -597,8 +652,11 @@ export function sing(line, castMember) {
   const perform = () => {
     const id = castKey(castMember);
     if (singingMode !== 'speech') {
-      const engine = tone ? 'Tone.js synth' : 'Web Audio synth';
-      logLineEngine(line, castMember, engine, `${voicePool(castMember?.voice)} ${timbreFor(castMember)} (${castMember?.voice || 'alto'} range)`);
+      const engine = 'speechSynthesis' in window ? 'melodic speech synthesis' : tone ? 'Tone.js synth' : 'Web Audio synth';
+      const voice = 'speechSynthesis' in window
+        ? `${castMember?.voice || 'alto'} range, melodic phrases`
+        : `${voicePool(castMember?.voice)} ${timbreFor(castMember)} (${castMember?.voice || 'alto'} range)`;
+      logLineEngine(line, castMember, engine, voice);
       return singSynth(line, castMember);
     }
     const engine = castEngineMap.get(id) || 'synth';

@@ -7,6 +7,7 @@ import { complete } from './llm.js';
 const VOICES = ['soprano', 'alto', 'tenor', 'baritone', 'bass'];
 const CONFIDENCES = ['high', 'low'];
 const MOODS = ['tense', 'romantic', 'comic', 'tragic', 'triumphant'];
+const STUB_CACHE_VERSION = 'stub-lyrics-v2';
 
 const SYSTEM = `You are a brilliant comic-opera librettist. You rewrite group chats as comic operas.
 Reply with JSON ONLY: no markdown, no code fences, no commentary.`;
@@ -119,7 +120,7 @@ export async function makeLibretto(chatText) {
 
   // Key includes provider+model so stub output never shadows real output.
   const key = createHash('sha256')
-    .update(JSON.stringify([config.provider, config.provider === 'stub' ? '' : config.model, senders, messages]))
+    .update(JSON.stringify([config.provider, config.provider === 'stub' ? STUB_CACHE_VERSION : config.model, senders, messages]))
     .digest('hex');
   const file = new URL(`${key}.json`, config.cacheDir);
   try {

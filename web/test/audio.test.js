@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { describe, test } from 'node:test';
 
 let autoCompleteSpeech = true;
 let voices = [
@@ -87,8 +87,9 @@ globalThis.window = {
   clearInterval(id) { intervals.delete(id); },
 };
 
-const { sing, setSingingMode, primeAudio, orchestra, finale } = await import('../src/audio/index.js');
+const { sing, setSingingMode, primeAudio, orchestra, finale, prepareOpera } = await import('../src/audio/index.js');
 
+describe('audio behavior', { concurrency: false }, () => {
 test('speech uses stable natural English voices and modest delivery settings', async () => {
   setSingingMode('speech');
   const cast = Array.from({ length: 12 }, (_, index) => ({
@@ -145,24 +146,60 @@ test('voice selection falls back safely when the browser has no voices yet', asy
   ];
 });
 
-test('sung mode synthesizes a cast-specific vocal line using the current scene mood', async () => {
+test('spoken lyrics treat slash separators as pauses and ignore separator-only lines', async () => {
+  setSingingMode('speech');
+  const previousCount = utterances.length;
+  await sing('One / two // three', { id: 'slash-singer', voice: 'alto' });
+  assert.equal(utterances.at(-1).text, 'One, two, three');
+
+  await sing(' / // ', { id: 'slash-singer', voice: 'alto' });
+  await sing('... — !!!', { id: 'slash-singer', voice: 'alto' });
+  assert.equal(utterances.length, previousCount + 1, 'a separator-only lyric should not create a spoken utterance');
+});
+
+test('spoken voice prefetch uses the same slash-free lyric text', async () => {
+  setSingingMode('speech');
+  const requests = [];
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return {
+        ok: true,
+        headers: { get: () => 'audio/mpeg' },
+        blob: async () => new Blob(['audio']),
+      };
+    };
+    const line = { cast: 'prefetch-singer', lyric: 'Wait / and // listen!' };
+    await prepareOpera({ cast: [{ id: 'prefetch-singer', voice: 'tenor' }], scenes: [{ lines: [line] }] });
+    assert.equal(requests[0].text, 'Wait, and, listen!');
+  } finally {
+    globalThis.fetch = originalFetch;
+    await prepareOpera({ cast: [], scenes: [] });
+  }
+});
+
+test('sung mode performs the lyric with a mood-shaped melodic voice', async () => {
   await primeAudio();
   await orchestra('tragic');
   setSingingMode('sung');
-  const firstSungOscillator = oscillators.length;
+  const previousCount = utterances.length;
   const performance = sing('Ah, the night is full of hope.', { id: 'sung-baritone', voice: 'baritone' });
   await new Promise((resolve) => setImmediate(resolve));
 
-  const [[timerId, timer]] = [...timers].filter(([, value]) => value.delay >= 350);
-  assert.ok(timer, 'the synthesized line should wait for its notes to finish');
-  timers.delete(timerId);
-  timer.callback();
+  for (const [timerId, timer] of [...timers]) {
+    if (timer.delay >= 350) {
+      timers.delete(timerId);
+      timer.callback();
+    }
+  }
   await performance;
 
-  const sungOscillators = oscillators.slice(firstSungOscillator);
-  assert.ok(sungOscillators.length > 0);
-  assert.ok(sungOscillators.every((oscillator) => ['sine', 'triangle', 'sawtooth', 'square'].includes(oscillator.type)));
-  assert.ok(sungOscillators.some((oscillator) => oscillator.type === 'square'), 'cast voice profiles should shape the synthesized singer');
+  const phrases = utterances.slice(previousCount);
+  assert.ok(phrases.length > 1, 'a lyric should be delivered as melodic phrases');
+  assert.ok(phrases.some((utterance) => /night|hope/i.test(utterance.text)), 'the sung voice should perform the actual lyric words');
+  assert.ok(new Set(phrases.map((utterance) => utterance.pitch)).size > 1, 'pitch should follow the current mood contour');
+  assert.ok(phrases.every((utterance) => utterance.rate < 0.95), 'melodic delivery should use a more expressive pace');
 });
 
 test('scene changes replace accompaniment and the finale stops its loop', async () => {
@@ -182,4 +219,5 @@ test('scene changes replace accompaniment and the finale stops its loop', async 
   await performance;
 
   assert.equal(intervals.size, 0, 'the accompaniment loop should stop when the finale completes');
+});
 });

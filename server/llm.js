@@ -51,7 +51,7 @@ function stub(senders, messages) {
     const chunk = messages.slice(Math.floor((messages.length * s) / 3)).slice(0, per);
     const lines = chunk.map((m, i) => ({
       cast: idOf.get(m.sender) ?? cast[0].id,
-      lyric: m.text.replace(/\s+/g, ' ').slice(0, 120) + (i % 2 ? ', oh!' : ', ah!'),
+      lyric: m.text.replace(/\s+/g, ' ').slice(0, 120),
       direction: 'Strikes a pose',
       emotion: EMOTIONS[(i + s) % EMOTIONS.length],
     }));
