@@ -10,6 +10,7 @@ let voices = [
 ];
 const utterances = [];
 const timers = new Map();
+const oscillators = [];
 let timerSequence = 0;
 let cancelCount = 0;
 const intervals = new Map();
@@ -40,7 +41,11 @@ class FakeAudioContext {
     this.destination = new FakeAudioNode();
   }
   createGain() { return new FakeAudioNode(); }
-  createOscillator() { return new FakeAudioNode(); }
+  createOscillator() {
+    const oscillator = new FakeAudioNode();
+    oscillators.push(oscillator);
+    return oscillator;
+  }
   createBiquadFilter() { return new FakeAudioNode(); }
   resume() { return Promise.resolve(); }
 }
@@ -82,9 +87,10 @@ globalThis.window = {
   clearInterval(id) { intervals.delete(id); },
 };
 
-const { sing, primeAudio, orchestra, finale } = await import('../src/audio/index.js');
+const { sing, setSingingMode, primeAudio, orchestra, finale } = await import('../src/audio/index.js');
 
 test('speech uses stable natural English voices and modest delivery settings', async () => {
+  setSingingMode('speech');
   const cast = Array.from({ length: 12 }, (_, index) => ({
     id: `singer-${index}`,
     voice: index % 2 ? 'bass' : 'soprano',
@@ -107,6 +113,7 @@ test('speech uses stable natural English voices and modest delivery settings', a
 });
 
 test('speech timeout cancels stalled playback and clears its timer', async () => {
+  setSingingMode('speech');
   autoCompleteSpeech = false;
   const previousCount = utterances.length;
   const previousCancels = cancelCount;
@@ -126,6 +133,7 @@ test('speech timeout cancels stalled playback and clears its timer', async () =>
 });
 
 test('voice selection falls back safely when the browser has no voices yet', async () => {
+  setSingingMode('speech');
   voices = [];
   await sing('The cast can still continue.', { id: 'voice-loading', voice: 'alto' });
   assert.equal(utterances.at(-1).voice, null);
@@ -135,6 +143,26 @@ test('voice selection falls back safely when the browser has no voices yet', asy
     { name: 'English Premium B', lang: 'en-GB' },
     { name: 'French Natural', lang: 'fr-FR' },
   ];
+});
+
+test('sung mode synthesizes a cast-specific vocal line using the current scene mood', async () => {
+  await primeAudio();
+  await orchestra('tragic');
+  setSingingMode('sung');
+  const firstSungOscillator = oscillators.length;
+  const performance = sing('Ah, the night is full of hope.', { id: 'sung-baritone', voice: 'baritone' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const [[timerId, timer]] = [...timers].filter(([, value]) => value.delay >= 350);
+  assert.ok(timer, 'the synthesized line should wait for its notes to finish');
+  timers.delete(timerId);
+  timer.callback();
+  await performance;
+
+  const sungOscillators = oscillators.slice(firstSungOscillator);
+  assert.ok(sungOscillators.length > 0);
+  assert.ok(sungOscillators.every((oscillator) => ['sine', 'triangle', 'sawtooth', 'square'].includes(oscillator.type)));
+  assert.ok(sungOscillators.some((oscillator) => oscillator.type === 'square'), 'cast voice profiles should shape the synthesized singer');
 });
 
 test('scene changes replace accompaniment and the finale stops its loop', async () => {

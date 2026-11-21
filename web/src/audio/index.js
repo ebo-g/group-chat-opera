@@ -27,8 +27,16 @@ const MOODS = {
   },
 };
 const VOICE = {
-  soprano: { pitch: 1.06, rate: 0.98 }, alto: { pitch: 1.03, rate: 0.97 },
-  tenor: { pitch: 1, rate: 0.98 }, baritone: { pitch: 0.97, rate: 0.96 }, bass: { pitch: 0.94, rate: 0.95 },
+  soprano: { pitch: 1.06, rate: 0.98, midi: 76, wave: 'triangle' },
+  alto: { pitch: 1.03, rate: 0.97, midi: 69, wave: 'sine' },
+  tenor: { pitch: 1, rate: 0.98, midi: 64, wave: 'sawtooth' },
+  baritone: { pitch: 0.97, rate: 0.96, midi: 59, wave: 'square' },
+  bass: { pitch: 0.94, rate: 0.95, midi: 52, wave: 'triangle' },
+};
+const MELODIES = {
+  tense: [0, 3, 1, 5, 2, 7, 5, 1], romantic: [0, 2, 4, 2, 5, 4, 2, 0],
+  comic: [0, 4, 2, 7, 5, 2, 4, 0], tragic: [0, 2, 1, 4, 2, 1, -1, 0],
+  triumphant: [0, 4, 7, 5, 9, 7, 4, 0],
 };
 
 let tonePromise;
@@ -36,9 +44,13 @@ let tone;
 let pad;
 let melody;
 let bass;
+let voiceBus;
+const voiceSynths = new Map();
+const castTimbres = new Map();
 let toneVolume;
 let toneMusic;
 let repeatId;
+let activeMood = 'comic';
 let unlocked = false;
 let audioContext;
 let fallbackBus;
@@ -46,6 +58,11 @@ let fallbackTimer;
 let fallbackOscillators = [];
 let fallbackLevel = 0.62;
 let speechQueue = Promise.resolve();
+let singingMode = 'sung';
+
+export function setSingingMode(mode) {
+  singingMode = mode === 'speech' ? 'speech' : 'sung';
+}
 
 function loadTone() {
   if (!tonePromise) tonePromise = import(/* @vite-ignore */ TONE_URL).then((module) => module.default || module).catch(() => null);
@@ -168,6 +185,7 @@ export async function orchestra(mood = 'comic') {
   if (!unlocked) return;
   await primeAudio();
   const chosen = MOODS[mood] ? mood : 'comic';
+  activeMood = chosen;
   if (!tone || !pad || !melody || !bass || !toneMusic) { startFallback(chosen); return; }
 
   fadeTone(0, 0.45);
@@ -175,8 +193,6 @@ export async function orchestra(mood = 'comic') {
     tone.Transport.clear(repeatId);
     repeatId = undefined;
   }
-  window.clearInterval(fallbackTimer);
-  stopFallbackNotes();
   tone.Transport.bpm.rampTo(MOODS[chosen].bpm, 0.8);
   const pattern = MOODS[chosen];
   let step = 0;
@@ -204,6 +220,7 @@ function stopOrchestra() {
   fadeTone(0, 1);
   window.clearInterval(fallbackTimer);
   fallbackTimer = undefined;
+  stopFallbackNotes();
   if (fallbackBus && audioContext) fallbackBus.gain.setTargetAtTime(0, audioContext.currentTime, 0.2);
 }
 
@@ -250,6 +267,90 @@ function duckMusic(isDucked) {
   if (fallbackBus && audioContext) fallbackBus.gain.setTargetAtTime(isDucked ? 0.055 : fallbackLevel, audioContext.currentTime, 0.18);
 }
 
+function castKey(castMember) {
+  return String(castMember?.id || castMember?.name || castMember?.character || castMember?.voice || 'chorus');
+}
+
+function timbreFor(castMember) {
+  const key = castKey(castMember);
+  if (!castTimbres.has(key)) {
+    const profile = VOICE[castMember?.voice] || VOICE.alto;
+    const supportedWaves = new Set(['sine', 'triangle', 'sawtooth', 'square']);
+    castTimbres.set(key, supportedWaves.has(profile.wave) ? profile.wave : 'sine');
+  }
+  return castTimbres.get(key);
+}
+
+function syllablesOf(text) {
+  const syllables = [];
+  for (const word of text.toLowerCase().match(/[a-z]+/g) || []) {
+    const groups = word.match(/[aeiouy]+/g) || [];
+    const count = Math.max(1, groups.length - (word.endsWith('e') && groups.length > 1 ? 1 : 0));
+    for (let index = 0; index < count; index++) syllables.push(['ah', 'oh', 'ee', 'oo'][syllables.length % 4]);
+  }
+  if (!syllables.length && text.trim()) syllables.push('ah');
+  return syllables;
+}
+
+function vowelSynth(castMember) {
+  const key = castKey(castMember);
+  if (voiceSynths.has(key)) return voiceSynths.get(key);
+  const filter = new tone.Filter(1500, 'lowpass').connect(voiceBus);
+  const voice = new tone.PolySynth(tone.Synth, {
+    oscillator: { type: timbreFor(castMember) },
+    envelope: { attack: 0.035, decay: 0.09, sustain: 0.42, release: 0.12 },
+  }).connect(filter);
+  voiceSynths.set(key, { synth: voice, filter });
+  return voiceSynths.get(key);
+}
+
+function singSynth(line, castMember) {
+  const text = typeof line === 'string' ? line : line?.lyric || '';
+  const notes = syllablesOf(text);
+  if (!notes.length) return Promise.resolve();
+  const profile = VOICE[castMember?.voice] || VOICE.alto;
+  const mood = MELODIES[activeMood] || MELODIES.comic;
+  const step = 0.22;
+  const duration = 0.19;
+  duckMusic(true);
+  if (tone && tone.now) {
+    ensureToneGraph();
+    voiceBus ||= new tone.Volume(-8).toDestination();
+    const performer = vowelSynth(castMember);
+    const start = tone.now() + 0.035;
+    const formants = { ah: 900, oh: 560, ee: 2200, oo: 430 };
+    notes.forEach((vowel, index) => {
+      const midi = profile.midi + mood[index % mood.length] + (index && index % 6 === 0 ? 12 : 0);
+      performer.filter.frequency.setValueAtTime(formants[vowel], start + index * step);
+      performer.synth.triggerAttackRelease(tone.Frequency(midi, 'midi').toNote(), duration, start + index * step, 0.58);
+    });
+  } else {
+    const context = getContext();
+    if (context?.state === 'running') {
+      const base = context.currentTime + 0.035;
+      const formants = { ah: 900, oh: 560, ee: 2200, oo: 430 };
+      notes.forEach((vowel, index) => {
+        const midi = profile.midi + mood[index % mood.length] + (index && index % 6 === 0 ? 12 : 0);
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const filter = context.createBiquadFilter();
+        oscillator.type = timbreFor(castMember);
+        oscillator.frequency.value = 440 * 2 ** ((midi - 69) / 12);
+        filter.type = 'bandpass';
+        filter.frequency.value = formants[vowel];
+        const at = base + index * step;
+        gain.gain.setValueAtTime(0, at);
+        gain.gain.linearRampToValueAtTime(0.045, at + 0.035);
+        gain.gain.setTargetAtTime(0.001, at + duration * 0.45, 0.06);
+        oscillator.connect(filter).connect(gain).connect(context.destination);
+        oscillator.start(at);
+        oscillator.stop(at + duration + 0.2);
+      });
+    }
+  }
+  return new Promise((resolve) => window.setTimeout(() => { duckMusic(false); resolve(); }, Math.max(350, notes.length * step * 1000)));
+}
+
 function hashString(value) {
   let hash = 2166136261;
   for (const character of String(value)) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
@@ -283,25 +384,31 @@ function speakLine(line, castMember) {
     if (utterance.voice?.lang) utterance.lang = utterance.voice.lang;
     let done = false;
     let timer;
-    const finish = (cancel = false) => {
+    const finish = () => {
       if (done) return;
       done = true;
       window.clearTimeout(timer);
-      if (cancel) window.speechSynthesis.cancel();
       duckMusic(false);
       resolve();
     };
     utterance.onstart = () => duckMusic(true);
-    utterance.onend = () => finish();
-    utterance.onerror = () => finish();
+    utterance.onend = finish;
+    utterance.onerror = finish;
     const estimate = Math.max(4500, Math.min(35000, text.trim().split(/\s+/).length * 430));
-    timer = window.setTimeout(() => finish(true), estimate);
+    timer = window.setTimeout(() => {
+      window.speechSynthesis.cancel();
+      finish();
+    }, estimate);
     try { window.speechSynthesis.speak(utterance); } catch { finish(); }
   });
 }
 
-/** Speak a lyric with a voice profile and duck the accompaniment until it ends. */
+/** Perform a lyric using the selected vocal style and keep each singer in order. */
 export function sing(line, castMember) {
-  speechQueue = speechQueue.then(() => speakLine(line, castMember), () => speakLine(line, castMember));
+  const perform = () => singingMode === 'speech' ? speakLine(line, castMember) : singSynth(line, castMember);
+  speechQueue = speechQueue.then(perform, perform);
   return speechQueue;
 }
+
+// Download the library early without starting the audio context or playing sound.
+void loadTone();
