@@ -10,7 +10,9 @@ const BACKSTAGE = [
 
 /** Render the landing page and deliver a libretto to the caller when ready. */
 export function onLibretto(callback) {
-  const root = document.getElementById('app');
+  // main.js owns the app shell and keeps #opera-root beside #landing-root.
+  // Render inside the landing mount point so it does not detach the stage.
+  const root = document.getElementById('landing-root') || document.getElementById('app');
   if (!root) throw new Error('Could not find the #app element.');
 
   root.innerHTML = `
