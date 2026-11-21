@@ -34,4 +34,4 @@ node_modules/
 dist/
 .idea/
 *.iml
-src/
+/src/
