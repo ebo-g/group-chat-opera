@@ -1,4 +1,4 @@
-import { primeAudio } from '../audio/index.js';
+import { primeAudio, setSingingMode } from '../audio/index.js';
 import './landing.css';
 
 const BACKSTAGE = [
@@ -31,6 +31,7 @@ export function onLibretto(callback) {
               <input id="chat-file" type="file" accept=".txt,text/plain" />
             </label>
             <button class="opera-primary" id="perform-chat" type="button" disabled>Turn this chat into an opera <span aria-hidden="true">↗</span></button>
+            <button class="opera-voice-toggle" id="voice-mode" type="button" aria-pressed="false">Sung mode <span>On</span> · Spoken voices <span>Off</span></button>
             <div class="opera-divider"><span>or</span></div>
             <button class="opera-sample" id="use-sample" type="button">Use the sample chat <span aria-hidden="true">→</span></button>
             <p class="opera-privacy">Use a fictional chat, or one every participant agrees to share. Its text is sent to the opera composer.</p>
@@ -56,12 +57,21 @@ export function onLibretto(callback) {
   const fileLabel = root.querySelector('#file-label');
   const perform = root.querySelector('#perform-chat');
   const sample = root.querySelector('#use-sample');
+  const voiceMode = root.querySelector('#voice-mode');
   const loading = root.querySelector('#loading');
   const loadingMessage = root.querySelector('#loading-message');
   const error = root.querySelector('#error');
   let chosenFile = null;
   let busy = false;
+  let speechEnabled = false;
   let messageTimer;
+
+  voiceMode.addEventListener('click', () => {
+    speechEnabled = !speechEnabled;
+    setSingingMode(speechEnabled ? 'speech' : 'sung');
+    voiceMode.setAttribute('aria-pressed', String(speechEnabled));
+    voiceMode.innerHTML = `Sung mode <span>${speechEnabled ? 'Off' : 'On'}</span> · Spoken voices <span>${speechEnabled ? 'On' : 'Off'}</span>`;
+  });
 
   function selectFile(file) {
     if (!file) return;
