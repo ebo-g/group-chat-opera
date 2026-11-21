@@ -86,6 +86,14 @@ export function nextBarTime(lead = 0.08) {
   return state.anchor + Math.max(0, Math.ceil((now - state.anchor) / bar)) * bar;
 }
 
+/** Context time of the next 16th-note grid point. Keeps a rap line on beat without
+ * making the lyric wait as long as a whole bar before it becomes audible. */
+export function nextStepTime(lead = 0.025) {
+  if (!state) return null;
+  const now = state.ctx.currentTime + lead;
+  return state.anchor + Math.max(0, Math.ceil((now - state.anchor) / state.stepSeconds)) * state.stepSeconds;
+}
+
 /** Start (or switch to) the beat for a scene mood. */
 export function startBeat(ctx, mood) {
   if (!ctx || ctx.state !== 'running' || typeof ctx.createBuffer !== 'function') return;

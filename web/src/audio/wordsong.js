@@ -388,7 +388,10 @@ export function singify(x, an, marks, nuclei, plan, profile, { vibrato = true, f
 
   let peak = 0;
   for (let i = 0; i < total; i++) {
-    out[i] = weight[i] > 1e-3 ? out[i] / Math.max(weight[i], 0.35) : 0;
+    // Hann grains overlap with a position-dependent sum. Dividing by an arbitrary
+    // floor creates audible level pumping at low-overlap points; normalize by the
+    // actual overlap instead, with only a near-zero guard for uncovered samples.
+    out[i] = weight[i] > 1e-3 ? out[i] / weight[i] : 0;
     peak = Math.max(peak, Math.abs(out[i]));
   }
   // gentle fades and normalise
