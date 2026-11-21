@@ -1,4 +1,6 @@
 import './stage/stage.css';
+import './stage/castScreen.css';
+import { showCastScreen } from './stage/castScreen.js';
 import {
     initStage,
     openCurtains,
@@ -55,15 +57,17 @@ export async function runOpera(libretto) {
         operaRoot.style.display = 'block';
         operaRoot.removeAttribute('aria-hidden');
 
-        initStage(operaRoot, libretto.cast);
+        const performance = await showCastScreen(libretto, audio);
+        await audio.primeAudio();
+        initStage(operaRoot, performance.cast);
         await Promise.all([openCurtains(), performanceAudio.overture()]);
 
-        for (const scene of libretto.scenes) {
+        for (const scene of performance.scenes) {
             await showScene(scene);
             await performanceAudio.orchestra(scene.mood);
 
             for (const line of scene.lines) {
-                const castMember = libretto.cast.find((c) => c.id === line.cast);
+                const castMember = performance.cast.find((c) => c.id === line.cast);
                 if (!castMember) {
                     console.warn('No cast member for line.cast =', line.cast);
                     continue;
@@ -74,7 +78,7 @@ export async function runOpera(libretto) {
         }
 
         await Promise.all([closeCurtains(), performanceAudio.finale()]);
-        await curtainCall(libretto.cast);
+        await curtainCall(performance.cast);
     } catch (err) {
         console.error('Opera failed:', err);
         operaRoot.style.display = 'none';
