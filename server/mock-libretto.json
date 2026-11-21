@@ -1,0 +1,52 @@
+{
+  "title": "The Unread Messages of Chez Karen",
+  "cast": [
+    { "id": "c1", "name": "Karen", "role": "The Organizer who made a spreadsheet for brunch", "voice": "soprano", "color": "#e63946" },
+    { "id": "c2", "name": "Dave", "role": "The Silent Reader, seen but never replying", "voice": "bass", "color": "#457b9d" },
+    { "id": "c3", "name": "Priya", "role": "The Meme Dealer", "voice": "alto", "color": "#f4a261" },
+    { "id": "c4", "name": "Tom", "role": "The Perpetually Late Tenor", "voice": "tenor", "color": "#2a9d8f" }
+  ],
+  "scenes": [
+    {
+      "title": "Act I: The Brunch Proposal",
+      "mood": "comic",
+      "lines": [
+        { "cast": "c1", "lyric": "Brunch at eleven! I have made a spreadsheet!", "direction": "Sweeps in waving a clipboard", "emotion": "excited" },
+        { "cast": "c3", "lyric": "A spreadsheet? For eggs? Oh, Karen, my dear!", "direction": "Leans on a pillar, smirking", "emotion": "amused" },
+        { "cast": "c1", "lyric": "Column A is names, and column B is toast!", "direction": "Points dramatically at the audience", "emotion": "proud" },
+        { "cast": "c2", "lyric": "...", "direction": "Stares from the shadows, thumbs-up emoji floating", "emotion": "blank" },
+        { "cast": "c4", "lyric": "I'm ten minutes away! I'm nearly there!", "direction": "Enters, clearly still in pajamas", "emotion": "flustered" },
+        { "cast": "c3", "lyric": "He said that yesterday from his bed!", "direction": "Shows a phone to the crowd", "emotion": "gleeful" },
+        { "cast": "c1", "lyric": "Eleven means eleven, not a quarter to noon!", "direction": "Taps an enormous wristwatch", "emotion": "stern" },
+        { "cast": "c4", "lyric": "Traffic, my friends, is a cruel, cruel moon!", "direction": "Clutches his chest", "emotion": "pleading" }
+      ]
+    },
+    {
+      "title": "Act II: The Seen-Zone Aria",
+      "mood": "tragic",
+      "lines": [
+        { "cast": "c1", "lyric": "Dave, Dave, you've read it, I see the two blue ticks!", "direction": "Falls to her knees holding a phone", "emotion": "anguished" },
+        { "cast": "c2", "lyric": "I read it. I did. I just forgot to reply.", "direction": "Steps into a spotlight, very slowly", "emotion": "guilty" },
+        { "cast": "c3", "lyric": "Three weeks ago, he left us on read!", "direction": "Wails into a handkerchief", "emotion": "dramatic" },
+        { "cast": "c4", "lyric": "He once took a month to answer 'ok'!", "direction": "Wipes a fake tear", "emotion": "mournful" },
+        { "cast": "c2", "lyric": "The thumb was heavy; the words would not come.", "direction": "Gazes at his thumb in horror", "emotion": "remorseful" },
+        { "cast": "c1", "lyric": "Then type just 'k' and set my spirit free!", "direction": "Reaches out a trembling hand", "emotion": "pleading" },
+        { "cast": "c2", "lyric": "I cannot. For 'k' seems passive-aggressive to me.", "direction": "Turns away, cape swirling", "emotion": "torn" }
+      ]
+    },
+    {
+      "title": "Act III: The Meme Triumph",
+      "mood": "triumphant",
+      "lines": [
+        { "cast": "c3", "lyric": "Behold! A cat in a tiny hat! Rejoice!", "direction": "Raises a glowing phone like a torch", "emotion": "triumphant" },
+        { "cast": "c4", "lyric": "It's me! It's truly me! I've found my voice!", "direction": "Points at the screen, overjoyed", "emotion": "delighted" },
+        { "cast": "c2", "lyric": "Ha! Ha! Ha!", "direction": "Finally laughs, a deep rumbling bass", "emotion": "joyful" },
+        { "cast": "c1", "lyric": "He typed! He typed! Three letters: 'lol'!", "direction": "Leaps onto a table", "emotion": "ecstatic" },
+        { "cast": "c3", "lyric": "The group chat lives, and all is forgiven!", "direction": "Throws confetti", "emotion": "elated" },
+        { "cast": "c4", "lyric": "And I'll be on time to the next, I swear!", "direction": "Looks at the clock and gasps", "emotion": "hopeful" },
+        { "cast": "c1", "lyric": "You won't. But we'll save you a seat and some toast!", "direction": "Pats him on the shoulder", "emotion": "fond" },
+        { "cast": "c2", "lyric": "Seen. Liked. Loved. Forever yours, Dave.", "direction": "Bows low as the curtain falls", "emotion": "warm" }
+      ]
+    }
+  ]
+}
