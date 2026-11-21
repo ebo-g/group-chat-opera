@@ -5,6 +5,7 @@ import { parseChat, selectDramatic } from './parser.js';
 import { complete } from './llm.js';
 
 const VOICES = ['soprano', 'alto', 'tenor', 'baritone', 'bass'];
+const CONFIDENCES = ['high', 'low'];
 const MOODS = ['tense', 'romantic', 'comic', 'tragic', 'triumphant'];
 
 const SYSTEM = `You are a brilliant comic-opera librettist. You rewrite group chats as comic operas.
@@ -24,6 +25,7 @@ export function validateLibretto(l) {
     if (!str(c?.name)) errs.push(`cast[${i}].name`);
     if (!str(c?.role)) errs.push(`cast[${i}].role`);
     if (!VOICES.includes(c?.voice)) errs.push(`cast[${i}].voice must be one of ${VOICES}`);
+    if (!CONFIDENCES.includes(c?.voiceConfidence)) errs.push(`cast[${i}].voiceConfidence must be one of ${CONFIDENCES}`);
     if (!/^#[0-9a-fA-F]{6}$/.test(c?.color ?? '')) errs.push(`cast[${i}].color must be #rrggbb`);
   }
   if (!Array.isArray(l.scenes) || l.scenes.length !== 3) errs.push('scenes must be an array of exactly 3');
@@ -53,14 +55,16 @@ Requirements:
 - Exactly 3 scenes, each with 6-10 lines, telling a coherent story with an arc (setup, crisis, resolution).
 - Lyrics must RHYME (couplets), be short enough to sing, and quote real messages from the chat where funny.
 - Use only these people, one cast entry each. ids "c1", "c2", ... in the order given.
-- "voice": one of soprano, alto, tenor, baritone, bass. "color": distinct #rrggbb hex.
+- "voice": one of soprano, alto, tenor, baritone, bass. Choose it using the person's name AND clues in the chat (pronouns others use for them, e.g. "he said", "tell her"). Soprano/alto for likely female, tenor/baritone/bass for likely male. If unsure, pick alto or tenor.
+- "voiceConfidence": "high" if the name and/or pronoun clues clearly indicate gender, otherwise "low".
+- "color": distinct #rrggbb hex.
 - "mood" per scene: one of tense, romantic, comic, tragic, triumphant.
 - "direction" = a short stage direction; "emotion" = one word.
 - Never include phone numbers or other personal details.
 
 Output JSON ONLY in exactly this shape:
 {"title": string,
- "cast": [{"id": "c1", "name": string, "role": string, "voice": string, "color": "#hex"}],
+ "cast": [{"id": "c1", "name": string, "role": string, "voice": string, "voiceConfidence": "high"|"low", "color": "#hex"}],
  "scenes": [{"title": string, "mood": string,
    "lines": [{"cast": "c1", "lyric": string, "direction": string, "emotion": string}]}]}
 

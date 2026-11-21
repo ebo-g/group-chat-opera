@@ -10,12 +10,19 @@ into a **libretto** (JSON); the web app performs it.
 { "title": "string",
   "cast": [{ "id": "c1", "name": "string", "role": "string",
     "voice": "soprano|alto|tenor|baritone|bass",
+    "voiceConfidence": "high|low",
     "color": "#hex" }],
   "scenes": [{ "title": "string",
     "mood": "tense|romantic|comic|tragic|triumphant",
     "lines": [{ "cast": "c1", "lyric": "string",
       "direction": "string", "emotion": "string" }] }] }
 ```
+`voice` is chosen from the person's name plus chat clues (pronouns others use
+for them): soprano/alto for likely female, tenor/baritone/bass for likely male,
+alto or tenor when unsure. `voiceConfidence` is `"high"` when those clues are
+clear, otherwise `"low"`. Librettos cached before this field existed lack it, so
+consumers should treat a missing value as `"low"`.
+
 Example: `server/mock-libretto.json` (copy in `web/public/mock-libretto.json`).
 
 ## Folder ownership (to avoid merge conflicts)

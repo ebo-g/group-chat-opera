@@ -42,6 +42,7 @@ function stub(senders, messages) {
     name,
     role: ROLES[i % ROLES.length],
     voice: VOICES[i % VOICES.length],
+    voiceConfidence: 'low', // stub doesn't infer gender
     color: COLORS[i % COLORS.length],
   }));
   const idOf = new Map(cast.map((c) => [c.name, c.id]));

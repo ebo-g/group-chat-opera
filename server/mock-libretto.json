@@ -1,11 +1,11 @@
 {
   "title": "The Marmite Affair: A Flatshare Opera",
   "cast": [
-    { "id": "c1", "name": "Priya", "role": "The Self-Appointed Rota Queen", "voice": "soprano", "color": "#e0457b" },
-    { "id": "c2", "name": "Jess", "role": "Keeper of the Sacred Oat Milk", "voice": "alto", "color": "#8e5bd9" },
-    { "id": "c3", "name": "Tobes", "role": "The Peacemaker Nobody Asked For", "voice": "tenor", "color": "#2fa8a0" },
-    { "id": "c4", "name": "Marcus", "role": "Accused of the Dishes", "voice": "baritone", "color": "#e08a2e" },
-    { "id": "c5", "name": "Big Dave", "role": "Landlord's Nephew, Unwanted Witness", "voice": "bass", "color": "#4a7fd1" }
+    { "id": "c1", "name": "Priya", "role": "The Self-Appointed Rota Queen", "voice": "soprano", "voiceConfidence": "high", "color": "#e0457b" },
+    { "id": "c2", "name": "Jess", "role": "Keeper of the Sacred Oat Milk", "voice": "alto", "voiceConfidence": "high", "color": "#8e5bd9" },
+    { "id": "c3", "name": "Tobes", "role": "The Peacemaker Nobody Asked For", "voice": "tenor", "voiceConfidence": "high", "color": "#2fa8a0" },
+    { "id": "c4", "name": "Marcus", "role": "Accused of the Dishes", "voice": "baritone", "voiceConfidence": "high", "color": "#e08a2e" },
+    { "id": "c5", "name": "Big Dave", "role": "Landlord's Nephew, Unwanted Witness", "voice": "bass", "voiceConfidence": "high", "color": "#4a7fd1" }
   ],
   "scenes": [
     {
