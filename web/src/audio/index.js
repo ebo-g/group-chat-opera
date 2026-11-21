@@ -326,12 +326,12 @@ async function sungLine(line, castMember) {
   if (prepared && context?.state === 'running') {
     const song = await Promise.race([prepared, new Promise((resolve) => window.setTimeout(() => resolve(null), WORD_SONG_WAIT_MS))]);
     if (song) {
-      logLineEngine(line, castMember, `sung words (${song.source})`, `${profile.sex} ${profile.voice}, ${song.heard}/${song.expected} syllables`);
+      logLineEngine(line, castMember, genre === 'rap' ? `rap voice (${song.source})` : `sung words (${song.source})`, genre === 'rap' ? `${profile.sex} ${profile.voice}, clear source audio` : `${profile.sex} ${profile.voice}, ${song.heard}/${song.expected} syllables`);
       duckMusic(true);
       try {
         // Start on the next 16th-note grid point. Waiting for a full bar made the
         // surtitles appear several seconds before the voice on slower scenes.
-        await playWordSong(context, song.buffer, genre === 'rap' ? nextStepTime() ?? undefined : undefined);
+        await playWordSong(context, song.buffer, genre === 'rap' ? nextStepTime() ?? undefined : undefined, { dry: genre === 'rap' });
       } finally {
         duckMusic(false);
       }

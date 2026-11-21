@@ -60,13 +60,13 @@ export function loadEspeak() {
 }
 
 /** Synthesize `text` for a voice type -> {samples: Float32Array, sampleRate} or null. */
-export function espeakSpeech(engine, text, voiceType) {
+export function espeakSpeech(engine, text, voiceType, { speed = 125 } = {}) {
   if (!engine || !text) return null;
   try {
     const wav = engine.speak(text, {
       rawdata: 'ArrayBuffer',
       pitch: PITCH_BY_VOICE[voiceType] ?? 60,
-      speed: 125,
+      speed,
       amplitude: 100,
     });
     if (!wav || !wav.byteLength) return null;

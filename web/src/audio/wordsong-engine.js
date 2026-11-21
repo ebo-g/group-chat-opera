@@ -7,7 +7,6 @@
 
 import { voiceBus } from './singer.js';
 import { singLyric, rapLyric } from './wordsong.js';
-import { stepSecondsFor } from './beat.js';
 import { loadEspeak, espeakSpeech } from './espeak.js';
 
 const WORKERS = 3;
@@ -135,13 +134,24 @@ export function startWordSongs({ cast, scenes, context, isCurrent, normalize, st
     }
     if (!speech) {
       const engine = await espeakPromise;
-      speech = espeakSpeech(engine, job.text, job.member.voice);
+      speech = espeakSpeech(engine, job.text, job.member.voice, { speed: style === 'rap' ? 165 : 125 });
       source = 'eSpeak';
       strength = 1;
     }
     if (!speech) return null;
-    const rap = style === 'rap' ? { stepSeconds: stepSecondsFor(job.mood), steps: 32 } : undefined;
-    const result = await sing(speech.samples, speech.sampleRate, job.text, job.member, job.mood, { formantStrength: rap ? strength * 0.5 : strength }, rap);
+    // PSOLA pitch/time processing made rap consonants buzzy and crackly. Rap has
+    // a beat to carry the line, so preserve the clean source voice and only use
+    // the grid for its entrance. The processed syllabic singing remains for opera.
+    if (style === 'rap') {
+      let peak = 0;
+      for (const sample of speech.samples) peak = Math.max(peak, Math.abs(sample));
+      const gain = peak > 0.82 ? 0.82 / peak : 1;
+      const samples = gain === 1 ? speech.samples : Float32Array.from(speech.samples, (sample) => sample * gain);
+      const buffer = context.createBuffer(1, samples.length, speech.sampleRate);
+      buffer.copyToChannel(samples, 0);
+      return { buffer, source: `clean ${source}`, heard: 0, expected: 0 };
+    }
+    const result = await sing(speech.samples, speech.sampleRate, job.text, job.member, job.mood, { formantStrength: strength });
     if (!result) return null;
     const buffer = context.createBuffer(1, result.samples.length, result.sampleRate);
     buffer.copyToChannel(result.samples, 0);
@@ -173,7 +183,7 @@ export function startWordSongs({ cast, scenes, context, isCurrent, normalize, st
 }
 
 /** Play a rendered song through the shared voice bus (with a little hall reverb). */
-export function playWordSong(context, buffer, when) {
+export function playWordSong(context, buffer, when, { dry = false } = {}) {
   return new Promise((resolve) => {
     let done = false;
     let timer;
@@ -185,7 +195,7 @@ export function playWordSong(context, buffer, when) {
     };
     const source = context.createBufferSource();
     source.buffer = buffer;
-    source.connect(voiceBus(context, context.destination).input);
+    source.connect(dry ? context.destination : voiceBus(context, context.destination).input);
     source.onended = finish;
     const at = when ?? context.currentTime + 0.03;
     timer = setTimeout(finish, Math.max(0, at - context.currentTime) * 1000 + buffer.duration * 1000 + 1000);
