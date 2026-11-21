@@ -294,7 +294,7 @@ export function singify(x, an, marks, nuclei, plan, profile, { vibrato = true, f
     const wanted = slot - onset - coda;
     const vowel = Math.max(Math.round(core * 0.6), sec(0.05), wanted);
     const gapAfter = i + 1 < notes.length ? Math.max(0, sec(notes[i + 1].start - (note.start + note.dur))) : 0;
-    const start = cursor;
+    const start = Math.max(cursor, sec(note.start)); // never earlier than the plan (rap grid)
     parts.push({ out: [start, start + onset], src: [s0, c0], kind: 'onset', i });
     parts.push({ out: [start + onset, start + onset + vowel], src: [c0, c1], kind: 'vowel', i });
     parts.push({ out: [start + onset + vowel, start + onset + vowel + coda], src: [c1, s1], kind: 'coda', i });
@@ -429,6 +429,57 @@ export function fitRegister(notes, speechF0) {
   }
   if (shift) for (const n of notes) n.midi += shift;
   return shift;
+}
+
+/**
+ * RAP FLOW: instead of a melody, lock the speech to the beat. Every syllable nucleus is moved to
+ * the nearest 16th-note step of a `steps`-step grid (2 bars by default), keeping the speaker's own
+ * pitch contour and natural vowel/consonant lengths, so the line grooves with the drums.
+ * Buffer time 0 is the downbeat of the first bar. Returns null when the speech is unusable.
+ */
+export function rapLyric(speech, sampleRate, text, member, { stepSeconds, steps = 32 }, { formantStrength = 0.5 } = {}) {
+  const x = toWordRate(speech, sampleRate);
+  const an = analyze(x, WORD_SR);
+  if (an.frames < 10) return null;
+  const { nuclei } = findNuclei(an, {});
+  if (!nuclei.length) return null;
+  const marks = pitchMarks(x, an);
+  if (!marks.length) return null;
+  const sr = an.sr;
+  const frameSample = (f) => an.center(f) - (an.hop >> 1);
+  const speechF0 = medianF0(an);
+  const coreF0 = (nu) => {
+    const v = [];
+    for (let f = nu.coreFrom; f <= nu.coreTo; f++) if (an.f0[f]) v.push(an.f0[f]);
+    v.sort((a, b) => a - b);
+    return v.length ? v[v.length >> 1] : speechF0;
+  };
+
+  // natural vowel-peak times, then compress/expand (within limits) to fill the bars, then snap to steps
+  const peakT = nuclei.map((nu) => frameSample(nu.peak) / sr);
+  const natural = Math.max(0.2, peakT[peakT.length - 1] - peakT[0]);
+  const usable = Math.max(8, steps - 4) * stepSeconds;
+  const scale = Math.max(0.55, Math.min(1.2, usable / natural));
+  const lead = 2; // start two 16ths into the bar so the first word lands just after the one
+  const slots = [];
+  nuclei.forEach((_, j) => {
+    let slot = lead + Math.round(((peakT[j] - peakT[0]) * scale) / stepSeconds);
+    if (j > 0 && slot <= slots[j - 1]) slot = slots[j - 1] + 1;
+    slots.push(slot);
+  });
+
+  const notes = nuclei.map((nu, j) => {
+    const onset = Math.max(0, (frameSample(nu.coreFrom) - frameSample(nu.from)) / sr);
+    const total = Math.max(0.08, (frameSample(nu.to) - frameSample(nu.from)) / sr);
+    return {
+      midi: 69 + 12 * Math.log2(coreF0(nu) / 440),
+      start: Math.max(0, slots[j] * stepSeconds - onset), // the vowel, not the consonant, sits on the grid
+      dur: total, // natural length: no held vowels in rap
+    };
+  });
+  const profile = singerProfile(member);
+  const { samples, timeline } = singify(x, an, marks, nuclei, { notes }, profile, { vibrato: false, formant: formantFor(profile, formantStrength) });
+  return { samples, sampleRate: WORD_SR, notes, heard: nuclei.length, expected: syllabify(text).length, slots, timeline, nuclei, steps };
 }
 
 /**

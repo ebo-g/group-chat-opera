@@ -28,4 +28,12 @@ To enable ElevenLabs speech, add the key and voice IDs to `server/.env` using th
 ## How the rap works
 - The server (`genre: "rap"`, the default) rewrites the chat as three rounds of rhymed couplets in Shakespearean English.
 - Each MC speaks their bars over a drum beat. The voice is ElevenLabs when `ELEVENLABS_API_KEY` and a voice for that character's voice type are set in `server/.env` (cached on disk, so replays are free); otherwise the browser's speech voices.
+- **Beat-locked flow:** every line's speech is analysed (pitch, syllables), each vowel is snapped onto the 16th-note grid of the drum machine with PSOLA re-synthesis, and the line starts on the next bar, so the bars actually land on the beat (`web/src/audio/wordsong.js`, `beat.js`).
+- **Speech source, per line:** ElevenLabs when configured, otherwise free in-browser eSpeak, otherwise the browser's own voices.
+- **Finale:** a scorecard crowns the champion MC, quotes the line of the night, and saves the lyrics.
 - The opera code (sung melodies, orchestra) is still in the repo but unused.
+
+## The pitch: where code meets culture
+Group chats are the folk literature of our generation: feuds, inside jokes, "seen" at 3am. We remix that story into two older cultures at once: **Shakespeare's language** and **hip-hop's battle tradition**. Upload a WhatsApp export and your chat becomes a three-round rap battle in early-modern English, performed by animated MCs over a live-synthesised beat, with voices you can rename and recast, ending in a scorecard that crowns your friend group's champion.
+
+Under the hood: an LLM turns the most dramatic stretch of the chat into rhymed couplets; a from-scratch DSP engine (pitch tracking, syllable detection, PSOLA) retunes natural speech onto the beat grid; everything is cached, offline-capable, and degrades gracefully.

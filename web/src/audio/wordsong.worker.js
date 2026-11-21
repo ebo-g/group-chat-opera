@@ -1,10 +1,10 @@
 // Runs the word-singing DSP off the main thread so the stage animation never stutters.
-import { singLyric } from './wordsong.js';
+import { singLyric, rapLyric } from './wordsong.js';
 
 self.onmessage = (event) => {
-  const { id, speech, sampleRate, text, member, mood, options } = event.data;
+  const { id, speech, sampleRate, text, member, mood, options, rap } = event.data;
   try {
-    const result = singLyric(speech, sampleRate, text, member, mood, options);
+    const result = rap ? rapLyric(speech, sampleRate, text, member, rap, options) : singLyric(speech, sampleRate, text, member, mood, options);
     if (!result) {
       self.postMessage({ id, result: null });
       return;

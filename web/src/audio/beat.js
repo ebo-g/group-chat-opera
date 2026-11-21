@@ -75,6 +75,17 @@ export function stopBeat() {
   state = undefined;
 }
 
+/** Seconds per 16th-note step for a mood's tempo. */
+export const stepSecondsFor = (mood) => 60 / (BPM[mood] || 95) / 4;
+
+/** Context time of the next bar line (the "one") at least `lead` seconds from now, or null if no beat is playing. */
+export function nextBarTime(lead = 0.08) {
+  if (!state) return null;
+  const bar = state.stepSeconds * 16;
+  const now = state.ctx.currentTime + lead;
+  return state.anchor + Math.max(0, Math.ceil((now - state.anchor) / bar)) * bar;
+}
+
 /** Start (or switch to) the beat for a scene mood. */
 export function startBeat(ctx, mood) {
   if (!ctx || ctx.state !== 'running' || typeof ctx.createBuffer !== 'function') return;
@@ -83,7 +94,7 @@ export function startBeat(ctx, mood) {
   const out = ctx.createGain();
   out.gain.value = 0.5;
   out.connect(ctx.destination);
-  state = { ctx, out, noise: noiseBuffer(ctx), ducked: false };
+  state = { ctx, out, noise: noiseBuffer(ctx), ducked: false, stepSeconds, anchor: ctx.currentTime + 0.06 };
   let step = 0;
   let bar = 0;
   let next = ctx.currentTime + 0.06;
@@ -102,5 +113,5 @@ export function startBeat(ctx, mood) {
 /** Lower the beat while someone is rapping. */
 export function duckBeat(isDucked) {
   if (!state) return;
-  state.out.gain.setTargetAtTime(isDucked ? 0.2 : 0.5, state.ctx.currentTime, 0.12);
+  state.out.gain.setTargetAtTime(isDucked ? 0.32 : 0.5, state.ctx.currentTime, 0.12);
 }

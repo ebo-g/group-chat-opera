@@ -1,6 +1,8 @@
 import './stage/stage.css';
 import './stage/castScreen.css';
 import './stage/rap.css';
+import './stage/scorecard.css';
+import { showScorecard } from './stage/scorecard.js';
 import { showCastScreen } from './stage/castScreen.js';
 import {
     initStage,
@@ -59,7 +61,6 @@ export async function runOpera(libretto) {
         // Rap mode: beat + spoken delivery + rap skin. Opera is the default.
         const rap = libretto.genre !== 'opera'; // rap is the product; 'opera' only if a libretto asks for it
         audio.setGenre?.(rap ? 'rap' : 'opera');
-        if (rap) audio.setSingingMode('speech');
         operaRoot.classList.toggle('genre-rap', rap);
         operaRoot.removeAttribute('aria-hidden');
 
@@ -86,6 +87,7 @@ export async function runOpera(libretto) {
 
         await Promise.all([closeCurtains(), performanceAudio.finale()]);
         await curtainCall(performance.cast);
+        showScorecard(operaRoot, performance);
     } catch (err) {
         console.error('Opera failed:', err);
         operaRoot.style.display = 'none';

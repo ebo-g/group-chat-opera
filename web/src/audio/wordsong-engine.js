@@ -6,7 +6,8 @@
 // wordless vocalise, so the opera always performs.
 
 import { voiceBus } from './singer.js';
-import { singLyric } from './wordsong.js';
+import { singLyric, rapLyric } from './wordsong.js';
+import { stepSecondsFor } from './beat.js';
 import { loadEspeak, espeakSpeech } from './espeak.js';
 
 const WORKERS = 3;
@@ -45,20 +46,20 @@ function getWorker() {
   return worker;
 }
 
-async function sing(speech, sampleRate, text, member, mood, options) {
+async function sing(speech, sampleRate, text, member, mood, options, rap) {
   const w = getWorker();
   if (w) {
     try {
       return await new Promise((resolve, reject) => {
         const id = ++nextId;
         waiting.set(id, { resolve, reject });
-        w.postMessage({ id, speech, sampleRate, text, member: { ...member }, mood, options });
+        w.postMessage({ id, speech, sampleRate, text, member: { ...member }, mood, options, rap });
       });
     } catch (error) {
       console.warn('[opera-audio] word-singing worker failed, using the main thread:', error.message);
     }
   }
-  return singLyric(speech, sampleRate, text, member, mood, options);
+  return rap ? rapLyric(speech, sampleRate, text, member, rap, options) : singLyric(speech, sampleRate, text, member, mood, options);
 }
 
 // ---------------------------------------------------------------- speech sources
@@ -100,7 +101,7 @@ async function elevenSpeech(context, text, member) {
  * Returns {songs: Map<line, Promise<{buffer, source}|null>>, ready: Promise} where `ready`
  * resolves once the first lines are done (so the show can start immediately after).
  */
-export function startWordSongs({ cast, scenes, context, isCurrent, normalize, onFirst = 2, firstTimeoutMs = 20000 }) {
+export function startWordSongs({ cast, scenes, context, isCurrent, normalize, style = 'sing', onFirst = 2, firstTimeoutMs = 20000 }) {
   const jobs = [];
   for (const scene of scenes || []) {
     for (const line of scene.lines || []) {
@@ -139,7 +140,8 @@ export function startWordSongs({ cast, scenes, context, isCurrent, normalize, on
       strength = 1;
     }
     if (!speech) return null;
-    const result = await sing(speech.samples, speech.sampleRate, job.text, job.member, job.mood, { formantStrength: strength });
+    const rap = style === 'rap' ? { stepSeconds: stepSecondsFor(job.mood), steps: 32 } : undefined;
+    const result = await sing(speech.samples, speech.sampleRate, job.text, job.member, job.mood, { formantStrength: rap ? strength * 0.5 : strength }, rap);
     if (!result) return null;
     const buffer = context.createBuffer(1, result.samples.length, result.sampleRate);
     buffer.copyToChannel(result.samples, 0);
@@ -171,7 +173,7 @@ export function startWordSongs({ cast, scenes, context, isCurrent, normalize, on
 }
 
 /** Play a rendered song through the shared voice bus (with a little hall reverb). */
-export function playWordSong(context, buffer) {
+export function playWordSong(context, buffer, when) {
   return new Promise((resolve) => {
     let done = false;
     let timer;
@@ -185,7 +187,8 @@ export function playWordSong(context, buffer) {
     source.buffer = buffer;
     source.connect(voiceBus(context, context.destination).input);
     source.onended = finish;
-    timer = setTimeout(finish, buffer.duration * 1000 + 1000);
-    source.start(context.currentTime + 0.03);
+    const at = when ?? context.currentTime + 0.03;
+    timer = setTimeout(finish, Math.max(0, at - context.currentTime) * 1000 + buffer.duration * 1000 + 1000);
+    source.start(at);
   });
 }

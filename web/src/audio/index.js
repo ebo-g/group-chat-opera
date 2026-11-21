@@ -1,6 +1,6 @@
 import { singPhrase, singerProfile } from './singer.js';
 import { startWordSongs, playWordSong } from './wordsong-engine.js';
-import { startBeat, stopBeat, duckBeat } from './beat.js';
+import { startBeat, stopBeat, duckBeat, nextBarTime } from './beat.js';
 const TONE_URL = 'https://esm.sh/tone@15.1.22';
 const MOODS = {
   tense: {
@@ -329,12 +329,18 @@ async function sungLine(line, castMember) {
       logLineEngine(line, castMember, `sung words (${song.source})`, `${profile.sex} ${profile.voice}, ${song.heard}/${song.expected} syllables`);
       duckMusic(true);
       try {
-        await playWordSong(context, song.buffer);
+        // rap: wait for the next bar line so the verse lands exactly on the beat
+        await playWordSong(context, song.buffer, genre === 'rap' ? nextBarTime() ?? undefined : undefined);
       } finally {
         duckMusic(false);
       }
       return;
     }
+  }
+  if (genre === 'rap') {
+    logLineEngine(line, castMember, 'speech synthesis (rap flow unavailable)', `${profile.sex} ${profile.voice}`);
+    await speakLine(line, castMember);
+    return;
   }
   logLineEngine(line, castMember, 'sung vocalise (words unavailable)', `${profile.sex} ${profile.voice} (fixed per character)`);
   await vocalise(text, castMember, context);
@@ -515,6 +521,7 @@ export async function prepareOpera(libretto) {
         context,
         isCurrent: () => run === wordSongRun,
         normalize: normalizeLyricText,
+        style: genre === 'rap' ? 'rap' : 'sing',
       });
       wordSongs = started.songs;
       await started.ready;
