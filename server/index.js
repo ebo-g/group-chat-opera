@@ -3,6 +3,7 @@ import cors from 'cors';
 import { readFile } from 'node:fs/promises';
 import { config } from './config.js';
 import { makeLibretto } from './libretto.js';
+import { synthesize, voiceStatus, TtsError } from './tts.js';
 
 const app = express();
 app.use(cors());
@@ -31,6 +32,21 @@ app.post('/api/libretto', async (req, res) => {
     res.status(e.status || 500).json({ error: e.message });
   }
 });
+
+// {text, castId} -> audio/mpeg. On any failure returns JSON {error, code} so the
+// frontend can fall back to synth voices. Repeats are served from the disk cache.
+app.post('/api/tts', async (req, res) => {
+  try {
+    const { audio, cached } = await synthesize(req.body?.text, req.body?.castId);
+    res.set({ 'Content-Type': 'audio/mpeg', 'X-Cache': cached ? 'HIT' : 'MISS' }).send(audio);
+  } catch (e) {
+    if (!(e instanceof TtsError)) console.error('tts error:', e.message);
+    res.status(e.status || 500).json({ error: e.message, code: e.code || 'internal' });
+  }
+});
+
+// Which ElevenLabs settings are present. true/false only, never the values.
+app.get('/api/voice/status', (_req, res) => res.json(voiceStatus()));
 
 // A funny fictional chat to try the app with.
 app.get('/api/sample', async (_req, res) => {

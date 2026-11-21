@@ -7,6 +7,7 @@
     "start": "node index.js",
     "dev": "node --watch index.js",
     "test:parser": "node test-parser.js",
+    "test:tts": "node test-tts.js",
     "test:snowflake": "node test-snowflake.js"
   },
   "dependencies": {
