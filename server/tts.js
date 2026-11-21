@@ -15,13 +15,26 @@ export class TtsError extends Error {
   }
 }
 
-export const voiceIdFor = (castId) => process.env[`ELEVENLABS_VOICE_${String(castId).toUpperCase()}`]?.trim() || '';
+export const VOICE_TYPES = ['soprano', 'alto', 'tenor', 'baritone', 'bass'];
+
+const env = (name) => process.env[name]?.trim() || '';
+const byType = (voice) => (VOICE_TYPES.includes(voice) ? env(`ELEVENLABS_VOICE_${voice.toUpperCase()}`) : '');
+const byPosition = (castId) => env(`ELEVENLABS_VOICE_${String(castId).toUpperCase()}`);
+
+/**
+ * Resolution order: the libretto voice type (ELEVENLABS_VOICE_SOPRANO...) if set,
+ * otherwise the positional slot (ELEVENLABS_VOICE_C1...).
+ */
+export const voiceIdFor = (castId, voice) => byType(voice) || byPosition(castId);
 
 /** Booleans only: never expose the key or voice IDs. */
 export function voiceStatus() {
-  const voices = Object.fromEntries(CAST_IDS.map((id) => [id, Boolean(voiceIdFor(id))]));
-  const key = Boolean(process.env.ELEVENLABS_API_KEY?.trim());
-  return { key, voices, ready: key && Object.values(voices).every(Boolean) };
+  const voices = Object.fromEntries(CAST_IDS.map((id) => [id, Boolean(byPosition(id))]));
+  const byVoiceType = Object.fromEntries(VOICE_TYPES.map((v) => [v, Boolean(byType(v))]));
+  const key = Boolean(env('ELEVENLABS_API_KEY'));
+  // ready = every castId resolves to a voice for ANY voice type the model may assign
+  const ready = key && CAST_IDS.every((id) => byPosition(id) || VOICE_TYPES.every((v) => byType(v)));
+  return { key, voices, byVoiceType, ready };
 }
 
 const cacheKey = (text, castId, voiceId) =>
@@ -30,15 +43,18 @@ const cacheKey = (text, castId, voiceId) =>
 const inflight = new Map(); // key -> Promise<Buffer>: dedupe concurrent identical requests
 
 /** -> { audio: Buffer, cached: boolean } or throws TtsError. */
-export async function synthesize(text, castId) {
+export async function synthesize(text, castId, voice) {
   if (typeof text !== 'string' || !text.trim()) throw new TtsError(400, 'bad_request', 'text (string) is required');
   if (text.length > MAX_TEXT) throw new TtsError(400, 'bad_request', `text is too long (max ${MAX_TEXT} characters)`);
   if (!CAST_IDS.includes(castId)) throw new TtsError(400, 'bad_cast', `castId must be one of ${CAST_IDS.join(', ')}`);
 
-  const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
-  const voiceId = voiceIdFor(castId);
+  if (voice !== undefined && voice !== null && voice !== '' && !VOICE_TYPES.includes(voice)) {
+    throw new TtsError(400, 'bad_voice', `voice must be one of ${VOICE_TYPES.join(', ')}`);
+  }
+  const apiKey = env('ELEVENLABS_API_KEY');
+  const voiceId = voiceIdFor(castId, voice);
   if (!apiKey) throw new TtsError(503, 'not_configured', 'ElevenLabs is not configured (missing API key); use fallback voices');
-  if (!voiceId) throw new TtsError(503, 'not_configured', `No ElevenLabs voice set for ${castId}; use fallback voices`);
+  if (!voiceId) throw new TtsError(503, 'not_configured', `No ElevenLabs voice set for ${castId}${voice ? '/' + voice : ''}; use fallback voices`);
 
   const key = cacheKey(text, castId, voiceId);
   const file = new URL(`audio/${key}.mp3`, config.cacheDir);

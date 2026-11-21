@@ -33,11 +33,11 @@ app.post('/api/libretto', async (req, res) => {
   }
 });
 
-// {text, castId} -> audio/mpeg. On any failure returns JSON {error, code} so the
+// {text, castId, voice?} -> audio/mpeg (voice = libretto voice type, optional). On any failure returns JSON {error, code} so the
 // frontend can fall back to synth voices. Repeats are served from the disk cache.
 app.post('/api/tts', async (req, res) => {
   try {
-    const { audio, cached } = await synthesize(req.body?.text, req.body?.castId);
+    const { audio, cached } = await synthesize(req.body?.text, req.body?.castId, req.body?.voice);
     res.set({ 'Content-Type': 'audio/mpeg', 'X-Cache': cached ? 'HIT' : 'MISS' }).send(audio);
   } catch (e) {
     if (!(e instanceof TtsError)) console.error('tts error:', e.message);

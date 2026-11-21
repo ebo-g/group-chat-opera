@@ -21,6 +21,7 @@ process.env.ELEVENLABS_API_KEY = 'test-key';
 process.env.ELEVENLABS_VOICE_C1 = 'voiceA';
 process.env.ELEVENLABS_VOICE_C2 = 'voiceB';
 delete process.env.ELEVENLABS_VOICE_C3;
+process.env.ELEVENLABS_VOICE_BARITONE = 'voiceBari';
 const { synthesize, voiceStatus, TtsError } = await import('./tts.js');
 const { config } = await import('./config.js');
 rmSync(new URL('audio/', config.cacheDir), { recursive: true, force: true });
@@ -31,6 +32,7 @@ const err = async (p) => p.then(() => assert.fail('should throw'), (e) => { asse
 // status: booleans only
 const st = voiceStatus();
 assert.deepEqual(st.voices, { c1: true, c2: true, c3: false, c4: false, c5: false });
+assert.deepEqual(st.byVoiceType, { soprano: false, alto: false, tenor: false, baritone: true, bass: false });
 assert.equal(st.key, true);
 assert.equal(st.ready, false);
 assert.ok(!JSON.stringify(st).includes('voiceA') && !JSON.stringify(st).includes('test-key'), 'status leaks no values');
@@ -58,8 +60,23 @@ const [p, q] = await Promise.all([synthesize(t2, 'c1'), synthesize(t2, 'c1')]);
 assert.equal(upstreamCalls, 3);
 assert.deepEqual(p.audio, q.audio);
 
+// voice type wins over position; unset type falls back to position
+const v1 = await synthesize('by role ' + text, 'c1', 'baritone');
+assert.match(lastHeaders.url, /voiceBari/);
+assert.equal(v1.cached, false);
+const v2 = await synthesize('by role ' + text, 'c1', 'soprano'); // no SOPRANO var -> positional c1 (voiceA)
+assert.match(lastHeaders.url, /voiceA/);
+assert.equal(v2.cached, false, 'different voice id -> different cache entry');
+const v3 = await synthesize('by role ' + text, 'c1', 'baritone');
+assert.equal(v3.cached, true);
+upstreamCalls = 3; // reset counter for the checks below
+// c3 has no positional voice, but a baritone type voice rescues it
+assert.equal((await synthesize('rescued', 'c3', 'baritone')).cached, false);
+upstreamCalls = 3;
+assert.equal((await err(synthesize('hi', 'c1', 'castrato'))).code, 'bad_voice');
+
 // unconfigured voice -> clear 503 with fallback hint, no upstream call
-let e = await err(synthesize('hi', 'c3'));
+let e = await err(synthesize('hi', 'c3', 'bass'));
 assert.deepEqual([e.status, e.code], [503, 'not_configured']);
 assert.equal(upstreamCalls, 3);
 
