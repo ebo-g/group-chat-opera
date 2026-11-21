@@ -20,7 +20,7 @@ async function snowflake(system, user) {
   const r = await client.chat.completions.create({
     model: config.model,
     temperature: 0.8,
-    max_tokens: 6000,
+    max_completion_tokens: 6000,
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },

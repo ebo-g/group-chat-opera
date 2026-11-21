@@ -15,7 +15,7 @@ for (const model of candidates) {
     const r = await client.chat.completions.create({
       model,
       messages: [{ role: 'user', content: 'Reply with the single word: pong' }],
-      max_tokens: 10,
+      max_completion_tokens: 10,
     });
     console.log(`OK   ${model}: ${r.choices[0].message.content.trim()}`);
     process.exit(0);
