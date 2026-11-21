@@ -165,10 +165,11 @@ function fanfare(notes, gap = 0.2) {
   }
   const context = getContext();
   if (!context || context.state !== 'running') return;
+  const frequencies = { C4: 261.63, E4: 329.63, G4: 392, C5: 523.25, E5: 659.25, G5: 783.99, C6: 1046.5 };
   notes.forEach((frequency, index) => {
     const oscillator = context.createOscillator(); const gain = context.createGain();
     const time = context.currentTime + index * gap;
-    oscillator.type = 'triangle'; oscillator.frequency.value = frequency;
+    oscillator.type = 'triangle'; oscillator.frequency.value = typeof frequency === 'number' ? frequency : frequencies[frequency];
     gain.gain.setValueAtTime(0, time); gain.gain.linearRampToValueAtTime(0.1, time + 0.025); gain.gain.exponentialRampToValueAtTime(0.001, time + 0.4);
     oscillator.connect(gain).connect(context.destination); oscillator.start(time); oscillator.stop(time + 0.42);
   });
