@@ -32,3 +32,6 @@ bin/
 node_modules/
 .env
 dist/
+.idea/
+*.iml
+src/
